@@ -1,3 +1,4 @@
+
 def predict(features):
 
     rsi, macd, ma_ratio = features
@@ -22,3 +23,10 @@ def predict(features):
         short_score += 0.2
 
     return min(long_score, 1), min(short_score, 1)
+
+
+# ===== 🔥 相容舊系統（關鍵修復） =====
+def predict_stock(features):
+    long_score, _ = predict(features)
+    return long_score
+
