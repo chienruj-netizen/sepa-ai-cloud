@@ -38,8 +38,6 @@ def select_stocks():
             "short": round(short_score,2)
         }
 
-        # ===== 策略切換 =====
-
         if regime == "bull":
             if long_score > 0.7:
                 long_list.append(data)
@@ -48,7 +46,7 @@ def select_stocks():
             if short_score > 0.7:
                 short_list.append(data)
 
-        else:  # sideways
+        else:
             if long_score > 0.75:
                 long_list.append(data)
             if short_score > 0.75:
@@ -59,8 +57,10 @@ def select_stocks():
 
     return regime, long_list[:3], short_list[:3]
 
-# ===== 🔥 相容舊系統（重要） =====
+
+# ===== 🔥 相容舊 pipeline（關鍵修復） =====
 def pick_candidates():
+
     regime, long_list, short_list = select_stocks()
 
     result = []
