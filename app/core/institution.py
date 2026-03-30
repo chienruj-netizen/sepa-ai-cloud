@@ -4,6 +4,13 @@ import os
 FINMIND_TOKEN = os.getenv("FINMIND_API")
 
 
+def safe_float(x):
+    try:
+        return float(x)
+    except:
+        return 0.0
+
+
 def get_institutional_flow(stock_id):
 
     try:
@@ -16,9 +23,14 @@ def get_institutional_flow(stock_id):
             "token": FINMIND_TOKEN
         }
 
-        res = requests.get(url, params=params, timeout=10).json()
+        res = requests.get(url, params=params, timeout=10)
 
-        data = res.get("data", [])
+        if res.status_code != 200:
+            print("❌ FinMind HTTP error:", res.status_code)
+            return 0.0
+
+        data_json = res.json()
+        data = data_json.get("data", [])
 
         if not data:
             return 0.0
@@ -28,12 +40,12 @@ def get_institutional_flow(stock_id):
         total = 0.0
 
         for d in recent:
-            buy = float(d.get("buy", 0))
-            sell = float(d.get("sell", 0))
+            buy = safe_float(d.get("buy"))
+            sell = safe_float(d.get("sell"))
 
             total += (buy - sell)
 
-        return total
+        return float(total)
 
     except Exception as e:
         print("❌ institution error:", e)

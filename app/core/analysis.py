@@ -22,7 +22,7 @@ def analyze_stock(stock):
         return None
 
     # =========================
-    # 🔥 全部轉一維（核心修正）
+    # 🔥 全部轉一維（核心）
     # =========================
     close = df["Close"].squeeze()
     volume = df["Volume"].squeeze()
@@ -37,15 +37,19 @@ def analyze_stock(stock):
     macd = ta.trend.MACD(close).macd()
 
     # =========================
-    # 🔒 安全取值（全部轉 float）
+    # 🔒 安全取值
     # =========================
-    price = float(close.iloc[-1])
-    ma20_val = float(ma20.iloc[-1])
-    rsi_val = float(rsi.iloc[-1])
-    macd_val = float(macd.iloc[-1])
+    try:
+        price = float(close.iloc[-1])
+        ma20_val = float(ma20.iloc[-1])
+        ma60_val = float(ma60.iloc[-1])
+        rsi_val = float(rsi.iloc[-1])
+        macd_val = float(macd.iloc[-1])
+    except:
+        return None
 
     # =========================
-    # 🚀 主升段預測（強制 bool）
+    # 🚀 主升段（強制 bool）
     # =========================
     try:
         breakout_ready = bool(predict_breakout(df))
@@ -53,7 +57,7 @@ def analyze_stock(stock):
         breakout_ready = False
 
     # =========================
-    # 📈 爆量偵測（強制 bool）
+    # 📈 爆量
     # =========================
     try:
         volume_spike, vol_ratio = detect_volume_spike(df)
@@ -64,7 +68,7 @@ def analyze_stock(stock):
         vol_ratio = 0.0
 
     # =========================
-    # 🏦 法人資金（強制 float）
+    # 🏦 法人（強制 float）
     # =========================
     try:
         inst_flow = float(get_institutional_flow(stock_id))
@@ -72,7 +76,7 @@ def analyze_stock(stock):
         inst_flow = 0.0
 
     # =========================
-    # 📰 新聞情緒（強制 float）
+    # 📰 新聞（強制 float）
     # =========================
     try:
         news = get_news_sentiment(stock_id)
@@ -81,7 +85,7 @@ def analyze_stock(stock):
         news_score = 0.0
 
     # =========================
-    # 🧠 評分系統
+    # 🧠 評分
     # =========================
     score = 0
 
@@ -104,7 +108,7 @@ def analyze_stock(stock):
         score += 10
 
     # =========================
-    # 📊 型態判斷
+    # 📊 型態
     # =========================
     if breakout_ready and volume_spike:
         pattern = "🚀 起漲前夜"
@@ -116,7 +120,7 @@ def analyze_stock(stock):
         pattern = "🌀 盤整"
 
     # =========================
-    # 📈 動能（安全）
+    # 📈 動能
     # =========================
     try:
         momentum = float(close.iloc[-1] - close.iloc[-3])
@@ -124,7 +128,7 @@ def analyze_stock(stock):
         momentum = 0.0
 
     # =========================
-    # 📦 回傳
+    # 📦 回傳（完整）
     # =========================
     return {
         "symbol": symbol,
@@ -136,5 +140,9 @@ def analyze_stock(stock):
         "news_score": news_score,
         "rsi": round(rsi_val, 2),
         "macd": round(macd_val, 2),
-        "momentum": round(momentum, 2)
+        "momentum": round(momentum, 2),
+
+        # 🔥 關鍵：給 decision 用
+        "ma20": round(ma20_val, 2),
+        "ma60": round(ma60_val, 2)
     }
