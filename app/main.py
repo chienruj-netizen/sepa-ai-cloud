@@ -1,6 +1,5 @@
 from app.core.analysis import analyze_stock
 from app.core.radar import detect_trend
-from app.core.news import get_news_sentiment
 from app.core.scoring import calculate_score
 from app.core.decision import make_decision
 
@@ -14,7 +13,7 @@ def run():
     for symbol in symbols:
 
         # =========================
-        # 📊 技術分析
+        # 📊 技術分析（已包含新聞）
         # =========================
         features = analyze_stock({"symbol": symbol})
 
@@ -27,24 +26,21 @@ def run():
         trend = detect_trend(features)
 
         # =========================
-        # 📰 新聞情緒
+        # 🧠 AI評分（直接用 features）
         # =========================
-        news = get_news_sentiment(symbol.split(".")[0])
-        news_score = news["score"]
-        news_label = news["label"]
+        score = calculate_score(
+            features,
+            trend,
+            features["news_score"]
+        )
 
         # =========================
-        # 🧠 AI評分
-        # =========================
-        score = calculate_score(features, trend, news_score)
-
-        # =========================
-        # 🤖 AI決策（核心）
+        # 🤖 AI決策
         # =========================
         decision = make_decision(features, trend, score)
 
         # =========================
-        # 🚨 過濾觀察單
+        # 🚨 過濾
         # =========================
         if decision["action"] != "⚪ 觀察":
             results.append({
@@ -54,13 +50,12 @@ def run():
                 "tp": decision["tp"],
                 "sl": decision["sl"],
                 "trend": trend,
-                "news": news_label,
                 "rr": decision["rr"],
                 "mode": decision["mode"]
             })
 
-        # 👉 Debug（強烈建議保留）
-        print(symbol, trend, news_score, score, decision)
+        # Debug（保留）
+        print(symbol, trend, score, decision)
 
     return {
         "market": "AI智能判斷",
