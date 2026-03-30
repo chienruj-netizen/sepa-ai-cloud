@@ -1,22 +1,24 @@
-import joblib
-import numpy as np
-import os
-
-MODEL_FILE = "model.pkl"
-
-model = None
-if os.path.exists(MODEL_FILE):
-    model = joblib.load(MODEL_FILE)
-
 def predict(features):
-    if model is None:
-        return 0.5, 0.5
 
-    X = np.array([features])
+    rsi, macd, ma_ratio = features
 
-    prob = model.predict_proba(X)[0][1]
+    long_score = 0.5
+    short_score = 0.5
 
-    long_score = prob
-    short_score = 1 - prob
+    # 多頭條件
+    if rsi > 55:
+        long_score += 0.2
+    if macd > 0:
+        long_score += 0.2
+    if ma_ratio > 1:
+        long_score += 0.2
 
-    return long_score, short_score
+    # 空頭條件
+    if rsi < 45:
+        short_score += 0.2
+    if macd < 0:
+        short_score += 0.2
+    if ma_ratio < 1:
+        short_score += 0.2
+
+    return min(long_score, 1), min(short_score, 1)

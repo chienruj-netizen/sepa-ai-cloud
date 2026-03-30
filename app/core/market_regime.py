@@ -1,19 +1,18 @@
-import yfinance as yf
+from app.core.data_fetcher import fetch_stock_data
 
 def get_market_regime():
 
-    try:
-        df = yf.download("^TWII", period="1mo")
+    df = fetch_stock_data("^TWII")
 
-        if df is None or len(df) < 20:
-            return "sideways"
+    if df is None or len(df) < 50:
+        return "sideways"
 
-        close = df["Close"]
+    close = df["close"].iloc[-1]
+    ma20 = df["close"].rolling(20).mean().iloc[-1]
 
-        if close.iloc[-1] > close.mean():
-            return "bull"
-        else:
-            return "bear"
-
-    except:
+    if close > ma20 * 1.01:
+        return "bull"
+    elif close < ma20 * 0.99:
+        return "bear"
+    else:
         return "sideways"
