@@ -1,20 +1,30 @@
-from app.core.data_fetcher import get_stock_data, get_realtime_price
+import requests
+import pandas as pd
+import os
 
-def pick_candidates():
+FINMIND_TOKEN = os.getenv("FINMIND_API")
 
-    stocks = ["2330", "2317", "2454"]
 
-    results = []
+def get_stock_data(symbol):
+    stock_id = symbol.replace(".TW", "")
 
-    for s in stocks:
+    url = "https://api.finmindtrade.com/api/v4/data"
 
-        df = get_stock_data(s)
-        price = get_realtime_price(s)
+    params = {
+        "dataset": "TaiwanStockPrice",
+        "data_id": stock_id,
+        "start_date": "2024-01-01",
+        "token": FINMIND_TOKEN
+    }
 
-        results.append({
-            "symbol": f"{s}.TW",
-            "df": df,
-            "price": price
-        })
+    resp = requests.get(url, params=params)
+    data = resp.json()["data"]
 
-    return results
+    if not data:
+        return None
+
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date")
+
+    return df

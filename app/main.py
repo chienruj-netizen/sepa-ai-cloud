@@ -1,49 +1,44 @@
-from app.core.selector import pick_candidates
 from app.core.analysis import analyze_stock
+from app.core.radar import detect_trend
+from app.core.news import get_news_sentiment
+from app.core.scoring import calculate_score
 from app.core.decision import make_decision
-from app.core.scoring import score_signal
-from app.core.news import get_news
-from app.core.news_ai import analyze_news
+
 
 def run():
 
-    stocks = pick_candidates()
+    symbols = ["2330.TW", "2317.TW", "2454.TW"]
+
     results = []
 
-    for s in stocks:
+    for symbol in symbols:
 
-        try:
-            features = analyze_stock(s)
-            if features is None:
-                continue
+        features = analyze_stock({"symbol": symbol})
 
-            decision = make_decision(features)
-            tech_score = score_signal(features)
-
-            # 🔥 新聞分析
-            news = get_news(s["symbol"])
-            news_result = analyze_news(news)
-
-            news_score = news_result["score"]
-
-            # 💥 融合分數（超關鍵）
-            final_score = int(tech_score * 0.7 + news_score * 0.3)
-
-            results.append({
-                "symbol": s.get("symbol"),
-                "signal": decision.get("action"),
-                "tp": decision.get("tp"),
-                "sl": decision.get("sl"),
-                "score": final_score,
-                "news_sentiment": news_result["sentiment"]
-            })
-
-        except Exception as e:
-            print(f"❌ Error: {e}")
+        if not features:
             continue
 
+        trend = detect_trend(features)
+
+        news_label, news_score = get_news_sentiment(symbol.split(".")[0])
+
+        score = calculate_score(features, trend, news_score)
+
+        decision = make_decision(features, trend, score)
+
+        if decision["action"] != "⚪ 觀察":
+            results.append({
+                "symbol": symbol,
+                "signal": decision["action"],
+                "score": decision["score"],
+                "tp": decision["tp"],
+                "sl": decision["sl"],
+                "trend": trend,
+                "news": news_label
+            })
+
     return {
-        "market": "sideways",
-        "strategy": "AI融合決策",
-        "results": results
+        "market": "AI智能判斷",
+        "strategy": "雷達 + 多因子 + 新聞",
+        "results": sorted(results, key=lambda x: x["score"], reverse=True)
     }
