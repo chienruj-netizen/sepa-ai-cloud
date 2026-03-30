@@ -13,15 +13,24 @@ from app.core.analysis import analyze_stock
 from app.core.decision import make_decision
 from app.core.radar import detect_trend
 
+# 🔥 新增
+from app.core.backtest_engine import run_backtest
+from app.core.performance import analyze_performance
+from app.core.optimizer import optimize
+from app.core.ai_optimizer import save_best
+from app.core.portfolio import get_equity
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # =====================
-# 👉 主選單
+# 👉 主選單（升級版）
 # =====================
 keyboard = [
     ["📊 今日 AI 選股"],
     ["🔍 單股分析"],
-    ["⚙️ 系統狀態"]
+    ["⚙️ 系統狀態"],
+    ["📈 回測分析", "🤖 AI優化"],
+    ["💰 資產狀態"]
 ]
 
 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -32,7 +41,7 @@ reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 # =====================
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 SEPA Cloud AI Engine 已啟動\n請選擇功能👇",
+        "🚀 AI交易系統 已啟動\n請選擇功能👇",
         reply_markup=reply_markup
     )
 
@@ -43,21 +52,18 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         data = run()
-
         results = data.get("results", [])
-        results = sorted(results, key=lambda x: x.get("score", 0), reverse=True)
 
         msg = f"🧠 AI市場分析\n市場：{data.get('market')}\n策略：{data.get('strategy')}\n\n"
 
         if not results:
-            msg += "⚠️ 今日無機會（或資料不足）"
+            msg += "⚠️ 今日無機會"
         else:
-            for item in results:
+            for r in results:
                 msg += (
-                    f"{item.get('symbol')}｜{item.get('signal')}\n"
-                    f"📊 分數:{item.get('score', 0)}\n"
-                    f"📈 趨勢:{item.get('trend')}\n"
-                    f"🎯 TP:{item.get('tp')} SL:{item.get('sl')}\n\n"
+                    f"{r['symbol']}｜{r['signal']}\n"
+                    f"分數:{r['score']}｜趨勢:{r['trend']}\n"
+                    f"TP:{r['tp']} SL:{r['sl']}\n\n"
                 )
 
         await update.message.reply_text(msg)
@@ -67,33 +73,13 @@ async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================
-# 🔍 單股分析（入口）
+# 🔍 單股分析
 # =====================
 async def stock_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["waiting_stock"] = True
     await update.message.reply_text("請輸入股票代碼，例如：2330")
 
 
-# =====================
-# ⚙️ 系統狀態
-# =====================
-async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "⚙️ 系統狀態\n"
-        "✅ 雲端運行\n"
-        "✅ AI決策引擎\n"
-        "✅ 即時資料（FinMind）\n"
-        "✅ 新聞分析（NewsAPI）\n"
-        "✅ 主升段雷達\n"
-        "✅ 爆量偵測\n"
-        "✅ 法人資金流"
-    )
-    await update.message.reply_text(msg)
-
-
-# =====================
-# 🧠 單股分析（核心）
-# =====================
 async def analyze_and_reply(update, symbol):
 
     try:
@@ -103,7 +89,6 @@ async def analyze_and_reply(update, symbol):
             await update.message.reply_text("❌ 無法取得資料")
             return
 
-        # 🔥 核心修正（一定要有）
         trend = detect_trend(features)
         score = features["score"]
 
@@ -111,14 +96,13 @@ async def analyze_and_reply(update, symbol):
 
         msg = (
             f"📊 {symbol}\n\n"
-            f"💰 現價：{features.get('price')}\n"
-            f"📈 型態：{features.get('pattern')}\n"
-            f"📊 MA20：{features.get('ma20')}｜MA60：{features.get('ma60')}\n"
-            f"⚡ RSI：{features.get('rsi')}｜MACD：{features.get('macd')}\n\n"
-            f"📊 分數：{decision.get('score')}\n"
-            f"🧠 AI決策：{decision.get('action')}\n"
-            f"🎯 TP：{decision.get('tp')}｜🛑 SL：{decision.get('sl')}\n\n"
-            f"📖 AI分析：\n{decision.get('reason', '')}"
+            f"💰 價格：{features['price']}\n"
+            f"📈 型態：{features['pattern']}\n"
+            f"📊 MA20：{features['ma20']}\n"
+            f"⚡ RSI：{features['rsi']}\n\n"
+            f"🧠 AI：{decision['action']}\n"
+            f"🎯 TP:{decision['tp']} SL:{decision['sl']}\n"
+            f"📊 RR:{decision['rr']}\n"
         )
 
         await update.message.reply_text(msg)
@@ -128,55 +112,123 @@ async def analyze_and_reply(update, symbol):
 
 
 # =====================
+# 📈 回測
+# =====================
+async def backtest_cmd(update, context):
+
+    try:
+        df = run_backtest("2330.TW")
+        perf = analyze_performance(df)
+
+        msg = (
+            "📈 回測結果\n\n"
+            f"勝率：{perf['win_rate']}\n"
+            f"平均報酬：{perf['avg_return']}\n"
+            f"總報酬：{perf['total_return']}\n"
+            f"交易數：{perf['trades']}"
+        )
+
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ 回測失敗：{e}")
+
+
+# =====================
+# 🤖 AI優化
+# =====================
+async def optimize_cmd(update, context):
+
+    try:
+        best, _ = optimize()
+        save_best(best)
+
+        msg = (
+            "🤖 AI優化完成\n\n"
+            f"threshold：{best['threshold']}\n"
+            f"vol_ratio：{best['vol_ratio']}"
+        )
+
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ 優化失敗：{e}")
+
+
+# =====================
+# 💰 資產
+# =====================
+async def portfolio_cmd(update, context):
+
+    try:
+        prices = {}  # 可升級成即時價格
+        equity = get_equity(prices)
+
+        await update.message.reply_text(f"💰 當前資產：{equity}")
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ 資產錯誤：{e}")
+
+
+# =====================
+# ⚙️ 系統狀態
+# =====================
+async def status_cmd(update, context):
+    msg = (
+        "⚙️ 系統狀態\n"
+        "✅ AI決策\n"
+        "✅ 回測系統\n"
+        "✅ 自動優化\n"
+        "✅ 模擬持倉"
+    )
+    await update.message.reply_text(msg)
+
+
+# =====================
 # 🧠 輸入處理
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     text = update.message.text.strip()
 
-    print("DEBUG:", text, context.user_data)
-
-    # 🔥 直接輸入股票
-    if text.isdigit() and len(text) <= 5:
+    if text.isdigit():
         symbol = f"{text}.TW"
         await analyze_and_reply(update, symbol)
         return
 
-    # 🔍 單股模式
     if context.user_data.get("waiting_stock"):
         context.user_data["waiting_stock"] = False
         symbol = f"{text}.TW"
         await analyze_and_reply(update, symbol)
         return
 
-    # 📊 今日選股
     if text == "📊 今日 AI 選股":
         await today_cmd(update, context)
-        return
 
-    # ⚙️ 系統狀態
-    if text == "⚙️ 系統狀態":
+    elif text == "📈 回測分析":
+        await backtest_cmd(update, context)
+
+    elif text == "🤖 AI優化":
+        await optimize_cmd(update, context)
+
+    elif text == "💰 資產狀態":
+        await portfolio_cmd(update, context)
+
+    elif text == "⚙️ 系統狀態":
         await status_cmd(update, context)
-        return
 
-    # fallback
-    await update.message.reply_text(
-        "👇 請點擊下方功能選單",
-        reply_markup=reply_markup
-    )
+    else:
+        await update.message.reply_text("請使用下方選單👇", reply_markup=reply_markup)
 
 
 # =====================
 # 🚀 主程式
 # =====================
 def main():
+
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("today", today_cmd))
-
-    app.add_handler(MessageHandler(filters.Regex("^🔍 單股分析$"), stock_prompt))
-    app.add_handler(MessageHandler(filters.Regex("^📊 今日 AI 選股$"), today_cmd))
-    app.add_handler(MessageHandler(filters.Regex("^⚙️ 系統狀態$"), status_cmd))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
