@@ -75,6 +75,9 @@ async def stock_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
+    print("DEBUG:", text, context.user_data)
+
+    # 👉 如果正在等輸入股票
     if context.user_data.get("waiting_stock"):
 
         context.user_data["waiting_stock"] = False
@@ -102,12 +105,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📊 分數：{decision.get('score')}"
             )
 
+            await update.message.reply_text(msg)
+            return
+
         except Exception as e:
-            msg = f"❌ 分析失敗：{e}"
+            await update.message.reply_text(f"❌ 分析失敗：{e}")
+            return
 
-        await update.message.reply_text(msg)
-        return
-
+    # 👉 fallback
     await update.message.reply_text("請使用選單操作👇")
 
 
@@ -120,11 +125,12 @@ def main():
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("today", today_cmd))
 
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("單股分析"), stock_prompt))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("今日 AI 選股"), today_cmd))
-
+   # ✅ 按鈕（精準匹配）
+    app.add_handler(MessageHandler(filters.Regex("^🔍 單股分析$"), stock_prompt))
+    app.add_handler(MessageHandler(filters.Regex("^📊 今日 AI 選股$"), today_cmd))
+    
+   # ✅ 所有輸入（最後才處理）
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
     print("🚀 Bot running...")
     app.run_polling()
 
