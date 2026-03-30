@@ -13,55 +13,57 @@ def analyze_stock(stock):
     symbol = stock["symbol"]
     stock_id = symbol.replace(".TW", "")
 
-    # =========================
-    # 📥 下載資料
-    # =========================
     df = yf.download(symbol, period="3mo", interval="1d")
 
     if df.empty:
         return None
 
-    # =========================
-    # 🔥 關鍵修正：確保一維資料
-    # =========================
+    # 🔥 全部轉一維（核心）
     close = df["Close"].squeeze()
+    volume = df["Volume"].squeeze()
 
     # =========================
-    # 📊 技術指標
+    # 技術指標
     # =========================
-    df["ma20"] = close.rolling(20).mean()
-    df["ma60"] = close.rolling(60).mean()
+    ma20 = close.rolling(20).mean()
+    ma60 = close.rolling(60).mean()
 
-    df["rsi"] = ta.momentum.RSIIndicator(close).rsi()
-    macd = ta.trend.MACD(close)
-    df["macd"] = macd.macd()
+    rsi = ta.momentum.RSIIndicator(close).rsi()
+    macd = ta.trend.MACD(close).macd()
 
-    latest = df.iloc[-1]
     price = float(close.iloc[-1])
 
     # =========================
-    # 🚀 主升段預測
+    # 安全取值（全部轉 float）
     # =========================
-    breakout_ready = predict_breakout(df)
+    ma20_val = float(ma20.iloc[-1])
+    rsi_val = float(rsi.iloc[-1])
+    macd_val = float(macd.iloc[-1])
 
     # =========================
-    # 📈 爆量偵測
+    # 主升段預測（強制bool）
+    # =========================
+    breakout_ready = bool(predict_breakout(df))
+
+    # =========================
+    # 爆量
     # =========================
     volume_spike, vol_ratio = detect_volume_spike(df)
+    volume_spike = bool(volume_spike)
 
     # =========================
-    # 🏦 法人資金
+    # 法人
     # =========================
     inst_flow = get_institutional_flow(stock_id)
 
     # =========================
-    # 📰 新聞情緒
+    # 新聞
     # =========================
     news = get_news_sentiment(stock_id)
-    news_score = news["score"]
+    news_score = float(news["score"])
 
     # =========================
-    # 🧠 評分系統（強化版）
+    # 評分
     # =========================
     score = 0
 
@@ -77,15 +79,14 @@ def analyze_stock(stock):
     if news_score > 0:
         score += 10
 
-    # 🔥 技術加強
-    if price > latest["ma20"]:
+    if price > ma20_val:
         score += 10
 
-    if latest["rsi"] > 60:
+    if rsi_val > 60:
         score += 10
 
     # =========================
-    # 📊 型態判斷
+    # 型態
     # =========================
     if breakout_ready and volume_spike:
         pattern = "🚀 起漲前夜"
@@ -97,7 +98,7 @@ def analyze_stock(stock):
         pattern = "🌀 盤整"
 
     # =========================
-    # 📈 動能（修正）
+    # 動能
     # =========================
     momentum = float(close.iloc[-1] - close.iloc[-3])
 
@@ -109,7 +110,7 @@ def analyze_stock(stock):
         "vol_ratio": round(float(vol_ratio), 2),
         "inst_flow": inst_flow,
         "news_score": news_score,
-        "rsi": round(float(latest["rsi"]), 2),
-        "macd": round(float(latest["macd"]), 2),
+        "rsi": round(rsi_val, 2),
+        "macd": round(macd_val, 2),
         "momentum": round(momentum, 2)
     }
