@@ -1,32 +1,37 @@
-from openai import OpenAI
-import os
-import json
+import requests
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-def analyze_news(news_list):
-
-    text = "\n".join(news_list)
-
-    prompt = f"""
-    以下是近期股票新聞：
-
-    {text}
-
-    請輸出JSON格式：
-    {{
-        "sentiment": "bullish / bearish / neutral",
-        "score": 0-100
-    }}
-    """
-
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
+def get_news_sentiment(symbol):
 
     try:
-        result = res.choices[0].message.content
-        return json.loads(result)
+        url = f"https://query1.finance.yahoo.com/v1/finance/search?q={symbol}"
+        data = requests.get(url, timeout=5).json()
+
+        news = data.get("news", [])
+
+        if not news:
+            return 0, "中性"
+
+        # 🔥 簡單情緒（標題）
+        score = 0
+
+        for n in news[:5]:
+            title = n.get("title", "").lower()
+
+            if "growth" in title or "profit" in title:
+                score += 1
+            elif "risk" in title or "loss" in title:
+                score -= 1
+
+        avg = score / max(len(news),1)
+
+        if avg > 0:
+            label = "偏多"
+        elif avg < 0:
+            label = "偏空"
+        else:
+            label = "中性"
+
+        return round(avg,2), label
+
     except:
-        return {"sentiment": "neutral", "score": 50}
+        return 0, "中性"

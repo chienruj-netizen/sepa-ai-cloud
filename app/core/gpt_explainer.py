@@ -3,17 +3,17 @@ from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def explain_trade(data):
+def explain_trade(symbol, side, prob):
 
     prompt = f"""
-股票：{data['symbol']}
-方向：{data['side']}
-AI分數：{data['prob']}
+股票：{symbol}
+方向：{side}
+AI信心：{prob}
 
-請用交易員角度說明：
-1. 為何進場
-2. 風險在哪
-3. 建議策略
+請用專業交易員角度簡短說明：
+1. 為什麼做這個方向
+2. 目前風險
+（50字內）
 """
 
     try:
@@ -21,6 +21,6 @@ AI分數：{data['prob']}
             model="gpt-4o-mini",
             messages=[{"role":"user","content":prompt}]
         )
-        return res.choices[0].message.content
+        return res.choices[0].message.content.strip()
     except:
         return "AI解釋失敗"
