@@ -11,6 +11,7 @@ from telegram.ext import (
 from app.main import run
 from app.core.analysis import analyze_stock
 from app.core.decision import make_decision
+from app.core.radar import detect_trend
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -37,7 +38,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================
-# 📊 今日選股（排序＋理由）
+# 📊 今日選股
 # =====================
 async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -55,9 +56,8 @@ async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += (
                     f"{item.get('symbol')}｜{item.get('signal')}\n"
                     f"📊 分數:{item.get('score', 0)}\n"
-                    f"📈 型態:{item.get('pattern', '未知')}\n"
-                    f"🎯 TP:{item.get('tp')} SL:{item.get('sl')}\n"
-                    f"🧠 理由:{item.get('reason', '')[:60]}...\n\n"
+                    f"📈 趨勢:{item.get('trend')}\n"
+                    f"🎯 TP:{item.get('tp')} SL:{item.get('sl')}\n\n"
                 )
 
         await update.message.reply_text(msg)
@@ -67,7 +67,7 @@ async def today_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================
-# 🔍 單股分析（進入模式）
+# 🔍 單股分析（入口）
 # =====================
 async def stock_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["waiting_stock"] = True
@@ -92,26 +92,30 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================
-# 🧠 單股分析函式（共用）
+# 🧠 單股分析（核心）
 # =====================
 async def analyze_and_reply(update, symbol):
 
     try:
         features = analyze_stock({"symbol": symbol})
 
-        if features is None:
-            await update.message.reply_text("❌ 無法取得該股票資料")
+        if not features:
+            await update.message.reply_text("❌ 無法取得資料")
             return
 
-        decision = make_decision(features)
+        # 🔥 核心修正（一定要有）
+        trend = detect_trend(features)
+        score = features["score"]
+
+        decision = make_decision(features, trend, score)
 
         msg = (
             f"📊 {symbol}\n\n"
-            f"💰 現價：{features.get('price', 'N/A')}\n"
-            f"📈 型態：{features.get('pattern', 'N/A')}\n"
-            f"📊 MA20：{features.get('ma20', 'N/A')}｜MA60：{features.get('ma60', 'N/A')}\n"
-            f"⚡ RSI：{features.get('rsi', 'N/A')}｜MACD：{features.get('macd', 'N/A')}\n\n"
-            f"📊 分數：{decision.get('score', 0)}\n"
+            f"💰 現價：{features.get('price')}\n"
+            f"📈 型態：{features.get('pattern')}\n"
+            f"📊 MA20：{features.get('ma20')}｜MA60：{features.get('ma60')}\n"
+            f"⚡ RSI：{features.get('rsi')}｜MACD：{features.get('macd')}\n\n"
+            f"📊 分數：{decision.get('score')}\n"
             f"🧠 AI決策：{decision.get('action')}\n"
             f"🎯 TP：{decision.get('tp')}｜🛑 SL：{decision.get('sl')}\n\n"
             f"📖 AI分析：\n{decision.get('reason', '')}"
@@ -124,49 +128,37 @@ async def analyze_and_reply(update, symbol):
 
 
 # =====================
-# 🧠 所有輸入處理（🔥最強版本）
+# 🧠 輸入處理
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
     print("DEBUG:", text, context.user_data)
 
-    # =====================
-    # 🔥 直接輸入股票（最強）
-    # =====================
+    # 🔥 直接輸入股票
     if text.isdigit() and len(text) <= 5:
         symbol = f"{text}.TW"
         await analyze_and_reply(update, symbol)
         return
 
-    # =====================
-    # 🔍 單股分析模式
-    # =====================
+    # 🔍 單股模式
     if context.user_data.get("waiting_stock"):
-
         context.user_data["waiting_stock"] = False
-
         symbol = f"{text}.TW"
         await analyze_and_reply(update, symbol)
         return
 
-    # =====================
-    # 📊 今日選股（文字觸發）
-    # =====================
+    # 📊 今日選股
     if text == "📊 今日 AI 選股":
         await today_cmd(update, context)
         return
 
-    # =====================
     # ⚙️ 系統狀態
-    # =====================
     if text == "⚙️ 系統狀態":
         await status_cmd(update, context)
         return
 
-    # =====================
-    # fallback（不再顯示錯誤）
-    # =====================
+    # fallback
     await update.message.reply_text(
         "👇 請點擊下方功能選單",
         reply_markup=reply_markup
@@ -174,7 +166,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =====================
-# 🧠 主程式
+# 🚀 主程式
 # =====================
 def main():
     app = Application.builder().token(TOKEN).build()
