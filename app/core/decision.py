@@ -4,15 +4,15 @@ def make_decision(features):
     score = features["score"]
     pattern = features["pattern"]
 
-    if "主升段" in pattern and score > 30:
-        action = "🟢 做多"
-        tp = round(price * 1.06, 2)
-        sl = round(price * 0.97, 2)
+    if "起漲" in pattern and score >= 60:
+        action = "🟢 佈局（起漲前）"
+        tp = round(price * 1.08, 2)
+        sl = round(price * 0.96, 2)
 
-    elif "主跌段" in pattern and score > 30:
+    elif "出貨" in pattern:
         action = "🔴 放空"
-        tp = round(price * 0.94, 2)
-        sl = round(price * 1.03, 2)
+        tp = round(price * 0.92, 2)
+        sl = round(price * 1.04, 2)
 
     else:
         action = "⚪ 觀察"
@@ -20,16 +20,13 @@ def make_decision(features):
         sl = 0
 
     reason = f"""
-📊 技術：
-RSI {features['rsi']} / MACD {features['macd']}
+🔥 爆發分析：
+量能倍數：{features['vol_ratio']}
+法人資金：{features['inst_flow']}
+新聞分數：{features['news']}
 
-📈 均線：
-MA20 {features['ma20']} vs MA60 {features['ma60']}
-
-📰 新聞分數：{features['news']}
-
-🧠 判斷：
-{pattern}
+📊 總評分：{score}
+📈 型態：{pattern}
 """
 
     return {

@@ -2,23 +2,17 @@ import yfinance as yf
 import pandas as pd
 import ta
 
-from app.core.data_fetcher import get_price
+from app.core.predictor import predict_breakout
+from app.core.volume import detect_volume_spike
+from app.core.institution import get_institutional_flow
 from app.core.news import get_news_score
 
 
 def analyze_stock(stock):
 
     symbol = stock["symbol"]
+    stock_id = symbol.replace(".TW", "")
 
-    # === 即時價格 ===
-    realtime = get_price(symbol)
-
-    if realtime is None:
-        return None
-
-    price = realtime["price"]
-
-    # === 技術資料 ===
     df = yf.download(symbol, period="3mo", interval="1d")
 
     if df.empty:
@@ -29,40 +23,53 @@ def analyze_stock(stock):
 
     df["rsi"] = ta.momentum.RSIIndicator(df["Close"]).rsi()
     macd = ta.trend.MACD(df["Close"])
-
     df["macd"] = macd.macd()
 
     latest = df.iloc[-1]
 
-    ma20 = latest["ma20"]
-    ma60 = latest["ma60"]
-    rsi = latest["rsi"]
-    macd_val = latest["macd"]
+    price = latest["Close"]
 
-    # === 型態判斷 ===
-    if price > ma20 > ma60 and macd_val > 0 and rsi > 55:
-        pattern = "主升段🔥"
-        trend_score = 30
-    elif price < ma20 < ma60 and macd_val < 0:
-        pattern = "主跌段💣"
-        trend_score = 30
+    # 🔥 主升段預測
+    breakout_ready = predict_breakout(df)
+
+    # 🔥 爆量
+    volume_spike, vol_ratio = detect_volume_spike(df)
+
+    # 🔥 法人
+    inst_flow = get_institutional_flow(stock_id)
+
+    # 🔥 新聞
+    news_score = get_news_score(stock_id)
+
+    # === 評分 ===
+    score = 0
+
+    if breakout_ready:
+        score += 30
+
+    if volume_spike:
+        score += 20
+
+    if inst_flow > 0:
+        score += 20
+
+    if news_score > 0:
+        score += 10
+
+    # === 型態 ===
+    if breakout_ready and volume_spike:
+        pattern = "🚀 起漲前夜"
+    elif inst_flow < 0:
+        pattern = "💣 主力出貨"
     else:
-        pattern = "盤整"
-        trend_score = 10
-
-    # === 新聞 ===
-    news_score = get_news_score(symbol)
-
-    total_score = trend_score + news_score * 5
+        pattern = "🌀 盤整"
 
     return {
         "symbol": symbol,
-        "price": price,
-        "ma20": round(ma20, 2),
-        "ma60": round(ma60, 2),
-        "rsi": round(rsi, 2),
-        "macd": round(macd_val, 2),
+        "price": round(price, 2),
         "pattern": pattern,
-        "score": total_score,
+        "score": score,
+        "vol_ratio": vol_ratio,
+        "inst_flow": inst_flow,
         "news": news_score
     }
