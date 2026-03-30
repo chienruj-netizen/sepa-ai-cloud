@@ -58,3 +58,30 @@ def select_stocks():
     short_list = sorted(short_list, key=lambda x: x["short"], reverse=True)
 
     return regime, long_list[:3], short_list[:3]
+
+# ===== 🔥 相容舊系統（重要） =====
+def pick_candidates():
+    regime, long_list, short_list = select_stocks()
+
+    result = []
+
+    for s in long_list:
+        result.append({
+            "symbol": s["symbol"],
+            "score": s["long"],
+            "entry": s["price"],
+            "tp": round(s["price"] * 1.05, 2),
+            "sl": round(s["price"] * 0.97, 2)
+        })
+
+    for s in short_list:
+        result.append({
+            "symbol": s["symbol"],
+            "score": s["short"],
+            "entry": s["price"],
+            "tp": round(s["price"] * 0.95, 2),
+            "sl": round(s["price"] * 1.03, 2)
+        })
+
+    return result
+
