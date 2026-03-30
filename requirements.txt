@@ -1,14 +1,5 @@
-python-telegram-bot==20.7
+python-telegram-bot[webhooks]==20.7
 pandas
 numpy
 yfinance
-ta
-requests
-lightgbm
-joblib
 scikit-learn
-openai
-python-dotenv
-redis
-requests
-flask
