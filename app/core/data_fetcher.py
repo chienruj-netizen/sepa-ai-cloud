@@ -1,29 +1,32 @@
-import requests
-import os
+import time
+from app.core.data_cache import load_from_db, save_to_db
+from app.core.data_cache import init_db
 
-FINMIND_TOKEN = os.getenv("FINMIND_API")
+from app.core.data_fetcher_raw import fetch_finmind, fetch_yahoo
+
+init_db()
 
 
-def get_price(symbol):
+def get_stock_data(symbol):
 
-    url = "https://api.finmindtrade.com/api/v4/data"
+    # 1️⃣ 先查 cache
+    df = load_from_db(symbol)
 
-    params = {
-        "dataset": "TaiwanStockPrice",
-        "data_id": symbol.replace(".TW", ""),
-        "start_date": "2024-01-01",
-        "token": FINMIND_TOKEN
-    }
+    if df is not None and len(df) > 50:
+        return df
 
-    res = requests.get(url, params=params)
-    data = res.json()
+    # 2️⃣ FinMind
+    df = fetch_finmind(symbol)
 
-    if "data" not in data or len(data["data"]) == 0:
-        return None
+    if df is not None:
+        save_to_db(symbol, df)
+        return df
 
-    latest = data["data"][-1]
+    # 3️⃣ Yahoo fallback
+    df = fetch_yahoo(symbol)
 
-    return {
-        "price": latest["close"],
-        "volume": latest["Trading_Volume"]
-    }
+    if df is not None:
+        save_to_db(symbol, df)
+        return df
+
+    return None

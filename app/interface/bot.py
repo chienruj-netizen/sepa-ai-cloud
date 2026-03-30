@@ -9,68 +9,50 @@ from telegram.ext import (
     filters
 )
 
-from app.main import run
-from app.core.analysis import analyze_stock
-from app.core.decision import make_decision
-from app.core.radar import detect_trend
-from app.core.gpt_explainer import gpt_explain   # 🔥 GPT解讀
-
-from app.core.backtest_engine import run_backtest
-from app.core.performance import analyze_performance
-from app.core.optimizer import optimize
-from app.core.ai_optimizer import save_best
-from app.core.portfolio import load_portfolio, get_equity
+from app.controller import analyze_single, get_today_picks
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 
 # =====================
-# 🎯 主面板
+# UI
 # =====================
 def build_dashboard():
-
-    keyboard = [
+    return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📊 今日選股", callback_data="today"),
+            InlineKeyboardButton("📊 今日爆發", callback_data="today"),
             InlineKeyboardButton("🔍 單股分析", callback_data="analyze")
         ],
         [
-            InlineKeyboardButton("📈 回測", callback_data="backtest"),
-            InlineKeyboardButton("🤖 AI優化", callback_data="optimize")
-        ],
-        [
-            InlineKeyboardButton("📦 持倉", callback_data="portfolio"),
-            InlineKeyboardButton("⚙️ 系統", callback_data="status")
+            InlineKeyboardButton("🚀 主升段", callback_data="long"),
+            InlineKeyboardButton("💣 起跌段", callback_data="short")
         ]
-    ]
-
-    return InlineKeyboardMarkup(keyboard)
+    ])
 
 
 # =====================
-# 📊 主畫面
+# 安全 edit
+# =====================
+async def safe_edit(query, text):
+    try:
+        await query.edit_message_text(text, reply_markup=build_dashboard())
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print("TG ERROR:", e)
+
+
+# =====================
+# 主畫面
 # =====================
 async def dashboard(update, context):
-
-    data = run()
-    portfolio = load_portfolio()
-    equity = get_equity({})
-
-    msg = (
-        "📊 AI交易控制台\n\n"
-        f"🧠 市場：{data.get('market')}\n"
-        f"📈 策略：{data.get('strategy')}\n\n"
-        f"💰 資產：{equity}\n"
-        f"📦 持倉數：{len(portfolio['positions'])}\n\n"
-        "────────────\n"
-        "選擇操作👇"
+    await update.message.reply_text(
+        "🚀 AI交易系統（V6：ML + GPT）",
+        reply_markup=build_dashboard()
     )
-
-    await update.message.reply_text(msg, reply_markup=build_dashboard())
 
 
 # =====================
-# 🔘 按鈕控制
+# 按鈕
 # =====================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -78,141 +60,88 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     action = query.data
 
-    # =====================
-    # 📊 今日選股 + GPT
-    # =====================
+    # 📊 今日爆發
     if action == "today":
 
-        data = run()
-        results = data.get("results", [])
+        picks = get_today_picks()
 
-        msg = "📊 今日AI選股\n\n"
+        msg = "📊 今日爆發股（AI預測）\n\n"
 
-        if not results:
-            msg += "⚠️ 今日無機會"
-        else:
-            for r in results:
+        for p in picks:
+            msg += (
+                f"{p['symbol']}\n"
+                f"📈 預測報酬：{round(p['score']*100,2)}%\n"
+                f"📊 趨勢：{p['trend']}\n"
+                f"🎯 動作：{p['action']}\n\n"
+            )
 
-                symbol = r["symbol"]
-
-                features = analyze_stock({"symbol": symbol})
-                trend = detect_trend(features)
-                decision = make_decision(features, trend, features["score"])
-
-                gpt_text = gpt_explain(features, decision, trend)
-
-                msg += (
-                    f"{symbol}｜{decision['action']}\n"
-                    f"TP:{decision['tp']} SL:{decision['sl']}\n"
-                    f"{gpt_text}\n\n"
-                )
-
-    # =====================
-    # 🔍 單股分析
-    # =====================
+    # 🔍 單股
     elif action == "analyze":
+        context.user_data["waiting"] = True
+        msg = "請輸入股票代碼，例如 2330"
 
-        context.user_data["waiting_input"] = True
-        msg = "請輸入股票代碼，例如：2330"
+    # 🚀 主升段
+    elif action == "long":
 
-    # =====================
-    # 📈 回測
-    # =====================
-    elif action == "backtest":
+        picks = get_today_picks()
+        strong = [p for p in picks if p["trend"] == "bull"]
 
-        df = run_backtest("2330.TW")
-        perf = analyze_performance(df)
+        msg = "🚀 主升段（AI）\n\n"
 
-        msg = (
-            "📈 回測結果\n\n"
-            f"勝率：{perf['win_rate']}\n"
-            f"平均報酬：{perf['avg_return']}\n"
-            f"總報酬：{perf['total_return']}\n"
-        )
+        for p in strong:
+            msg += f"{p['symbol']}｜{round(p['score']*100,1)}%\n"
 
-    # =====================
-    # 🤖 AI優化
-    # =====================
-    elif action == "optimize":
+    # 💣 起跌段
+    elif action == "short":
 
-        best, _ = optimize()
-        save_best(best)
+        picks = get_today_picks()
+        weak = [p for p in picks if p["trend"] == "bear"]
 
-        msg = (
-            "🤖 AI優化完成\n\n"
-            f"threshold：{best['threshold']}\n"
-            f"vol_ratio：{best['vol_ratio']}"
-        )
+        msg = "💣 起跌段（AI）\n\n"
 
-    # =====================
-    # 📦 持倉
-    # =====================
-    elif action == "portfolio":
-
-        data = load_portfolio()
-
-        msg = "📦 持倉\n\n"
-
-        if not data["positions"]:
-            msg += "目前無持倉"
-        else:
-            for p in data["positions"]:
-                msg += f"{p['symbol']}｜{p['action']}｜{p['entry']}\n"
-
-    # =====================
-    # ⚙️ 系統
-    # =====================
-    elif action == "status":
-
-        msg = (
-            "⚙️ 系統狀態\n"
-            "✅ GPT決策\n"
-            "✅ 回測系統\n"
-            "✅ 自動優化\n"
-            "✅ 模擬持倉"
-        )
+        for p in weak:
+            msg += f"{p['symbol']}｜{round(p['score']*100,1)}%\n"
 
     else:
         msg = "⚠️ 未知操作"
 
-    await query.edit_message_text(msg, reply_markup=build_dashboard())
+    await safe_edit(query, msg)
 
 
 # =====================
-# 🔍 接收輸入（單股）
+# 單股（🔥GPT）
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if context.user_data.get("waiting_input"):
+    if context.user_data.get("waiting"):
 
-        context.user_data["waiting_input"] = False
+        context.user_data["waiting"] = False
 
         symbol = f"{update.message.text}.TW"
 
-        try:
-            features = analyze_stock({"symbol": symbol})
-            trend = detect_trend(features)
-            decision = make_decision(features, trend, features["score"])
+        result = analyze_single(symbol)
 
-            gpt_text = gpt_explain(features, decision, trend)
+        f = result["features"]
+        d = result["decision"]
+        gpt = result.get("gpt", "")
 
-            msg = (
-                f"📊 {symbol}\n\n"
-                f"💰 價格：{features['price']}\n"
-                f"📈 型態：{features['pattern']}\n\n"
-                f"🧠 AI：{decision['action']}\n"
-                f"🎯 TP:{decision['tp']} SL:{decision['sl']}\n\n"
-                f"{gpt_text}"
-            )
+        msg = (
+            f"📊 {symbol}\n\n"
+            f"💰 價格：{f['price']}\n"
+            f"📈 型態：{f.get('pattern','-')}\n\n"
+            f"📊 AI預測報酬：{round(result['score']*100,2)}%\n"
+            f"🧠 決策：{d['action']}\n"
+            f"🎯 TP:{d['tp']} SL:{d['sl']}\n\n"
+        )
 
-        except Exception as e:
-            msg = f"❌ 分析失敗：{e}"
+        if gpt:
+            msg += f"🤖 GPT分析\n{gpt}"
 
-        await update.message.reply_text(msg, reply_markup=build_dashboard())
+        await update.message.reply_text(msg)
 
 
 # =====================
-# 🚀 主程式
+# 啟動
 # =====================
 def main():
 
@@ -222,7 +151,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🚀 Trading Panel Running...")
+    print("🚀 AI交易系統 V6 啟動")
     app.run_polling()
 
 
