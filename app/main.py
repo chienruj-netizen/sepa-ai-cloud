@@ -1,6 +1,7 @@
 from app.core.selector import pick_candidates
 from app.core.analysis import analyze_stock
 from app.core.decision import make_decision
+from app.core.scoring import score_signal   # ⭐ 新增
 
 def run():
 
@@ -16,12 +17,14 @@ def run():
                 continue
 
             decision = make_decision(features)
+            score = score_signal(features)   # ⭐ 新增
 
             results.append({
                 "symbol": s.get("symbol", "UNKNOWN"),
                 "signal": decision.get("action", "⚪"),
                 "tp": decision.get("tp", 0),
-                "sl": decision.get("sl", 0)
+                "sl": decision.get("sl", 0),
+                "score": score   # ⭐ 新增
             })
 
         except Exception as e:
