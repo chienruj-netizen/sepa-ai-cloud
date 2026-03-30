@@ -4,13 +4,16 @@ from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes
+    MessageHandler,
+    ContextTypes,
+    filters
 )
 
 from app.main import run
 from app.core.analysis import analyze_stock
 from app.core.decision import make_decision
 from app.core.radar import detect_trend
+from app.core.gpt_explainer import gpt_explain   # 🔥 GPT解讀
 
 from app.core.backtest_engine import run_backtest
 from app.core.performance import analyze_performance
@@ -22,18 +25,20 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 
 # =====================
-# 🎯 主面板（核心）
+# 🎯 主面板
 # =====================
 def build_dashboard():
 
     keyboard = [
         [
-            InlineKeyboardButton("🟢 做多", callback_data="long"),
-            InlineKeyboardButton("🔴 做空", callback_data="short"),
-            InlineKeyboardButton("📊 回測", callback_data="backtest")
+            InlineKeyboardButton("📊 今日選股", callback_data="today"),
+            InlineKeyboardButton("🔍 單股分析", callback_data="analyze")
         ],
         [
-            InlineKeyboardButton("🤖 AI優化", callback_data="optimize"),
+            InlineKeyboardButton("📈 回測", callback_data="backtest"),
+            InlineKeyboardButton("🤖 AI優化", callback_data="optimize")
+        ],
+        [
             InlineKeyboardButton("📦 持倉", callback_data="portfolio"),
             InlineKeyboardButton("⚙️ 系統", callback_data="status")
         ]
@@ -49,7 +54,6 @@ async def dashboard(update, context):
 
     data = run()
     portfolio = load_portfolio()
-
     equity = get_equity({})
 
     msg = (
@@ -62,10 +66,7 @@ async def dashboard(update, context):
         "選擇操作👇"
     )
 
-    await update.message.reply_text(
-        msg,
-        reply_markup=build_dashboard()
-    )
+    await update.message.reply_text(msg, reply_markup=build_dashboard())
 
 
 # =====================
@@ -75,13 +76,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
-
     action = query.data
 
     # =====================
-    # 📊 回測
+    # 📊 今日選股 + GPT
     # =====================
-    if action == "backtest":
+    if action == "today":
+
+        data = run()
+        results = data.get("results", [])
+
+        msg = "📊 今日AI選股\n\n"
+
+        if not results:
+            msg += "⚠️ 今日無機會"
+        else:
+            for r in results:
+
+                symbol = r["symbol"]
+
+                features = analyze_stock({"symbol": symbol})
+                trend = detect_trend(features)
+                decision = make_decision(features, trend, features["score"])
+
+                gpt_text = gpt_explain(features, decision, trend)
+
+                msg += (
+                    f"{symbol}｜{decision['action']}\n"
+                    f"TP:{decision['tp']} SL:{decision['sl']}\n"
+                    f"{gpt_text}\n\n"
+                )
+
+    # =====================
+    # 🔍 單股分析
+    # =====================
+    elif action == "analyze":
+
+        context.user_data["waiting_input"] = True
+        msg = "請輸入股票代碼，例如：2330"
+
+    # =====================
+    # 📈 回測
+    # =====================
+    elif action == "backtest":
 
         df = run_backtest("2330.TW")
         perf = analyze_performance(df)
@@ -129,22 +166,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         msg = (
             "⚙️ 系統狀態\n"
-            "✅ AI決策\n"
+            "✅ GPT決策\n"
             "✅ 回測系統\n"
             "✅ 自動優化\n"
             "✅ 模擬持倉"
         )
 
-    # =====================
-    # 🟢 做多 / 🔴 做空
-    # =====================
     else:
-        msg = "⚠️ 此功能預留（可接自動交易）"
+        msg = "⚠️ 未知操作"
 
-    await query.edit_message_text(
-        msg,
-        reply_markup=build_dashboard()
-    )
+    await query.edit_message_text(msg, reply_markup=build_dashboard())
+
+
+# =====================
+# 🔍 接收輸入（單股）
+# =====================
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if context.user_data.get("waiting_input"):
+
+        context.user_data["waiting_input"] = False
+
+        symbol = f"{update.message.text}.TW"
+
+        try:
+            features = analyze_stock({"symbol": symbol})
+            trend = detect_trend(features)
+            decision = make_decision(features, trend, features["score"])
+
+            gpt_text = gpt_explain(features, decision, trend)
+
+            msg = (
+                f"📊 {symbol}\n\n"
+                f"💰 價格：{features['price']}\n"
+                f"📈 型態：{features['pattern']}\n\n"
+                f"🧠 AI：{decision['action']}\n"
+                f"🎯 TP:{decision['tp']} SL:{decision['sl']}\n\n"
+                f"{gpt_text}"
+            )
+
+        except Exception as e:
+            msg = f"❌ 分析失敗：{e}"
+
+        await update.message.reply_text(msg, reply_markup=build_dashboard())
 
 
 # =====================
@@ -156,6 +220,7 @@ def main():
 
     app.add_handler(CommandHandler("start", dashboard))
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     print("🚀 Trading Panel Running...")
     app.run_polling()
