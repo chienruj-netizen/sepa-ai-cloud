@@ -259,3 +259,16 @@ async def handle_strategy(update, context):
     except Exception as e:
         await msg.edit_text(f"❌ 分析失敗: {e}")
 
+
+# ===== 🔥 強制單實例 =====
+import os, sys
+
+LOCK_FILE = "/tmp/bot.lock"
+
+if os.path.exists(LOCK_FILE):
+    print("⚠️ Duplicate instance blocked")
+    sys.exit()
+
+with open(LOCK_FILE, "w") as f:
+    f.write("lock")
+

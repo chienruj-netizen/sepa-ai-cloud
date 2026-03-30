@@ -2,13 +2,11 @@
 
 echo "🚀 Starting Telegram Bot..."
 
-# 🔥 防止重複啟動
+# 🔥 防止重複啟動（關鍵）
 if pgrep -f "app.interface.bot" > /dev/null
 then
     echo "⚠️ Bot already running, exit"
     exit 1
 fi
 
-# 🔥 只允許這一個入口
-python -m app.interface.bot
-
+exec python -m app.interface.bot
