@@ -4,84 +4,134 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 from app.pipeline_v2 import run_pipeline
 from app.core.market_regime import get_market_regime
+from app.core.ai_optimizer import CONFIG
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# 🔥 主選單
+# 主選單
 main_keyboard = [
     ["📊 今日策略"],
-    ["🔍 單股分析"],
     ["🌍 市場判斷"],
     ["⚙️ 系統狀態"]
 ]
 
-# 🔥 進階選單
-advanced_keyboard = [
-    ["📈 回測分析", "🤖 AI優化"],
-    ["💰 資產狀態"],
-    ["🔙 返回主選單"]
-]
+# ======================
+# 工具函數（關鍵）
+# ======================
+
+def calc_metrics(prob, tp, sl):
+
+    win_rate = prob
+
+    reward = tp
+    risk = abs(sl)
+
+    ev = (win_rate * reward) - ((1 - win_rate) * risk)
+
+    # 🔥 風險等級
+    if ev > 0.02:
+        level = "🟢 低風險"
+    elif ev > 0:
+        level = "🟡 中風險"
+    else:
+        level = "🔴 高風險"
+
+    return round(win_rate,2), round(ev,4), level
+
+
+def format_trade(c):
+
+    tp = CONFIG["tp"]
+    sl = CONFIG["sl"]
+
+    price = c.get("price", 0)
+    prob = c.get("prob", 0)
+
+    action = c.get("side", "HOLD")
+
+    if action == "LONG":
+        tp_price = price * (1 + tp)
+        sl_price = price * (1 + sl)
+        icon = "🟢"
+    else:
+        tp_price = price * (1 - tp)
+        sl_price = price * (1 - sl)
+        icon = "🔴"
+
+    win_rate, ev, level = calc_metrics(prob, tp, sl)
+
+    msg = f"{icon} {c['symbol']}\n"
+    msg += f"AI：{round(prob,2)}\n"
+    msg += f"進場：{round(price,2)}\n"
+    msg += f"TP：{round(tp_price,2)}\n"
+    msg += f"SL：{round(sl_price,2)}\n"
+    msg += f"勝率：{win_rate}\n"
+    msg += f"EV：{ev}\n"
+    msg += f"{level}\n\n"
+
+    return msg
 
 
 # ======================
 # 主選單
 # ======================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
     await update.message.reply_text("🤖 AI操盤系統已啟動", reply_markup=reply_markup)
 
 
 # ======================
-# 按鈕控制
+# 核心邏輯
 # ======================
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    # 📊 今日策略
+    # 📊 今日策略（核心）
     if text == "📊 今日策略":
-        await update.message.reply_text("🚀 分析中...")
-        run_pipeline()
-        await update.message.reply_text("✅ 已完成策略分析")
 
-    # 🔍 單股分析
-    elif text == "🔍 單股分析":
-        await update.message.reply_text("請輸入股票代碼，例如：2330.TW")
+        await update.message.reply_text("🚀 AI分析中...")
+
+        candidates = run_pipeline()
+
+        if not candidates:
+            await update.message.reply_text("⚠️ 今日無交易機會")
+            return
+
+        market = get_market_regime()
+
+        msg = f"📊 今日策略（AI）\n\n🌍 市場：{market}\n\n"
+
+        for c in candidates:
+            msg += format_trade(c)
+
+        await update.message.reply_text(msg)
 
     # 🌍 市場判斷
     elif text == "🌍 市場判斷":
         market = get_market_regime()
         await update.message.reply_text(f"🌍 市場狀態：{market}")
 
-    # ⚙️ 系統狀態 → 進階頁
+    # ⚙️ 系統狀態
     elif text == "⚙️ 系統狀態":
-        reply_markup = ReplyKeyboardMarkup(advanced_keyboard, resize_keyboard=True)
-        await update.message.reply_text("⚙️ 系統設定", reply_markup=reply_markup)
+        msg = "⚙️ 系統參數\n\n"
+        msg += f"TP：{CONFIG['tp']}\n"
+        msg += f"SL：{CONFIG['sl']}\n"
+        msg += f"門檻：{CONFIG['threshold']}\n"
+        msg += f"選股數：{CONFIG['top_k']}\n"
 
-    # 🔙 返回
-    elif text == "🔙 返回主選單":
-        reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
-        await update.message.reply_text("返回主選單", reply_markup=reply_markup)
-
-    # 📈 回測
-    elif text == "📈 回測分析":
-        await update.message.reply_text("📈 回測功能開發中")
-
-    # 🤖 AI優化
-    elif text == "🤖 AI優化":
-        await update.message.reply_text("🤖 AI優化中")
-
-    # 💰 資產
-    elif text == "💰 資產狀態":
-        await update.message.reply_text("💰 資產統計開發中")
+        await update.message.reply_text(msg)
 
     else:
-        await update.message.reply_text("⚠️ 未知指令")
+        await update.message.reply_text("⚠️ 請使用按鈕操作")
 
 
 # ======================
 # 主程式
 # ======================
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
