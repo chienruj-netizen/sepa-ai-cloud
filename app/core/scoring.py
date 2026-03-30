@@ -1,26 +1,24 @@
 def calculate_score(features, trend, news_score):
 
-    score = 0
+    score = 0.5
 
-    # 📈 趨勢加分
-    if trend == "🚀 主升段":
-        score += 30
-    elif trend == "💣 主跌段":
-        score += 25
+    # 技術面
+    if features.get("vol_ratio", 1) > 1.2:
+        score += 0.1
 
-    # ⚡ 動能
-    if features["macd"] > 0:
-        score += 15
+    if features.get("momentum", 0) > 0:
+        score += 0.1
 
-    # RSI
-    if 50 < features["rsi"] < 70:
-        score += 15
+    if features.get("rsi", 50) > 60:
+        score += 0.05
 
-    # 均線
-    if features["price"] > features["ma20"]:
-        score += 10
+    # 趨勢
+    if trend == "bull":
+        score += 0.1
+    elif trend == "bear":
+        score -= 0.1
 
-    # 📰 新聞
-    score += int(news_score * 0.3)
+    # 新聞
+    score += news_score * 0.2
 
-    return min(score, 100)
+    return max(0, min(1, score))
