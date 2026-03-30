@@ -10,29 +10,33 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 app = Flask(__name__)
 
-# ===== 建立 loop =====
+# ===== 建立 event loop =====
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-# ===== 建立 application =====
+# ===== Application =====
 application = ApplicationBuilder().token(TOKEN).build()
 
-# 🔥 關鍵：先 initialize 再 register
-loop.run_until_complete(application.initialize())
+# 🔥 正確初始化流程（關鍵）
+async def init():
+    await application.initialize()
+    register_handlers(application)
+    await application.start()
 
-# 🔥 再綁 handler
-register_handlers(application)
+loop.run_until_complete(init())
 
 
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
-
         update = Update.de_json(data, application.bot)
 
-        # 🔥 用 create_task（更穩）
-        loop.create_task(application.process_update(update))
+        # 🔥 正確 dispatch（這行才是關鍵）
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            loop
+        )
 
         return "ok"
 
