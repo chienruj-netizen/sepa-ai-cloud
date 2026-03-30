@@ -1,11 +1,13 @@
 import os
 import requests
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 
-def get_news_sentiment(symbol: str):
+# =========================
+# 📰 抓新聞
+# =========================
+def fetch_news(symbol: str):
     try:
         url = "https://newsapi.org/v2/everything"
         params = {
@@ -22,10 +24,14 @@ def get_news_sentiment(symbol: str):
         articles = data.get("articles", [])
         return [a["title"] for a in articles if a.get("title")]
 
-    except:
+    except Exception as e:
+        print("❌ fetch_news error:", e)
         return []
 
 
+# =========================
+# 🤖 情緒分析
+# =========================
 def get_news_sentiment(symbol: str):
 
     titles = fetch_news(symbol)
@@ -33,12 +39,13 @@ def get_news_sentiment(symbol: str):
     if not titles:
         return {"score": 0, "label": "neutral"}
 
-    text = " ".join(titles)
+    text = " ".join(titles).lower()
 
-    # 👉 簡化版（穩定優先）
-    if "upgrade" in text.lower() or "growth" in text.lower():
+    if "upgrade" in text or "growth" in text or "beat" in text:
         return {"score": 0.5, "label": "positive"}
-    elif "downgrade" in text.lower() or "decline" in text.lower():
+
+    elif "downgrade" in text or "decline" in text or "miss" in text:
         return {"score": -0.5, "label": "negative"}
+
     else:
         return {"score": 0, "label": "neutral"}
