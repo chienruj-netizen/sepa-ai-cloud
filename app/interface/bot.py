@@ -195,3 +195,17 @@ try:
 except Exception as e:
     print(f"⚠️ system handler 掛載失敗: {e}")
 
+
+# ===== 🔥 防止重複啟動 =====
+import os
+import sys
+
+LOCK_FILE = "/tmp/bot.lock"
+
+if os.path.exists(LOCK_FILE):
+    print("⚠️ Bot already running, exiting...")
+    sys.exit()
+
+with open(LOCK_FILE, "w") as f:
+    f.write("locked")
+
