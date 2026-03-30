@@ -1,52 +1,34 @@
 import requests
 import os
-from openai import OpenAI
 
 NEWS_API = os.getenv("NEWS_API_KEY")
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-def get_news_sentiment(keyword):
+def get_news_score(keyword):
 
     url = "https://newsapi.org/v2/everything"
 
     params = {
         "q": keyword,
         "language": "zh",
-        "pageSize": 5,
+        "sortBy": "publishedAt",
         "apiKey": NEWS_API
     }
 
-    res = requests.get(url, params=params).json()
+    res = requests.get(url, params=params)
+    data = res.json()
 
-    articles = res.get("articles", [])
+    if "articles" not in data:
+        return 0
 
-    if not articles:
-        return "中性", 0
+    score = 0
 
-    text = " ".join([a["title"] for a in articles])
+    for a in data["articles"][:5]:
+        title = a["title"]
 
-    # 🧠 AI判斷情緒
-    prompt = f"""
-    判斷以下新聞情緒（利多/利空/中性）並給0~100分：
+        if "漲" in title or "利多" in title:
+            score += 1
+        elif "跌" in title or "利空" in title:
+            score -= 1
 
-    {text}
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        content = response.choices[0].message.content
-
-        if "利多" in content:
-            return "🟢 利多", 70
-        elif "利空" in content:
-            return "🔴 利空", 30
-        else:
-            return "⚪ 中性", 50
-
-    except:
-        return "⚪ 中性", 50
+    return score
