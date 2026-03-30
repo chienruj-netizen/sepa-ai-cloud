@@ -1,4 +1,6 @@
 from app.core.ml_predictor import predict_stock
+from app.core.sepa_filter import apply_sepa_filter
+
 
 def pick_candidates():
 
@@ -11,13 +13,32 @@ def pick_candidates():
 
     for s in symbols:
         try:
-            r = predict_stock(s)
-            if r:
-                results.append(r)  # 🔥 保留完整資訊
-        except:
-            pass
+            ai = predict_stock(s)
+            sepa = apply_sepa_filter(s)
 
-    # 🔥 排序（最重要）
+            if not ai:
+                continue
+
+            score = ai["prob"]
+
+            # 🔥 融合邏輯（關鍵）
+            if sepa["breakout"]:
+                score += 0.1
+
+            if sepa["reversal"]:
+                score -= 0.1
+
+            results.append({
+                "symbol": s,
+                "prob": score,
+                "breakout": sepa["breakout"],
+                "reversal": sepa["reversal"]
+            })
+
+        except Exception as e:
+            print(f"⚠️ 選股錯誤 {s}: {e}")
+
+    # 🔥 排序
     results = sorted(results, key=lambda x: x["prob"], reverse=True)
 
-    return results[:5]
+    return results[:2]   # 🔥 Top 2
