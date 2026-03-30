@@ -4,14 +4,15 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder
 import os
 
+from app.interface.bot import register_handlers
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 app = Flask(__name__)
 
-# 建立 Telegram Application
 application = ApplicationBuilder().token(TOKEN).build()
+register_handlers(application)
 
-# ===== 🔥 接收 webhook =====
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
@@ -20,9 +21,12 @@ def webhook():
     asyncio.run(application.process_update(update))
     return "ok"
 
-
-# ===== 🔥 健康檢查 =====
 @app.route("/")
 def index():
     return "Bot is running 🚀"
 
+
+# 🔥 關鍵：一定要用 Render PORT
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
