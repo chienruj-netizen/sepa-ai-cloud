@@ -1,5 +1,5 @@
 #!/bin/bash
 
-echo "🚀 Starting Webhook Bot..."
+echo "🚀 Starting Official Webhook Bot..."
 
-python -m app.interface.webhook_server
+python -m app.interface.bot
