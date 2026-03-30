@@ -19,7 +19,10 @@ def register_handlers(app):
             else:
                 result = run()
 
-            print(f"📤 回傳結果:\n{result}")
+            # 🔥 強制轉字串（關鍵）
+            result = str(result)
+
+            print(f"📤 回傳結果: {result}")
 
             await update.message.reply_text(result)
 
