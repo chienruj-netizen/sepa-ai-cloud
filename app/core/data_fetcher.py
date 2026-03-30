@@ -1,12 +1,13 @@
+import time
 import pandas as pd
 from app.core.data_cache import load_from_db, save_to_db, init_db
 from app.core.data_fetcher_raw import fetch_finmind, fetch_yahoo
-from app.core.cache import get_cache, set_cache
-from app.core.redis_cache import get_redis, set_redis
-from app.core.rate_limiter import rate_limit
-from app.core.retry import retry
 
 init_db()
+
+# 🔥 記憶體快取（關鍵）
+_cache = {}
+CACHE_TTL = 600  # 10分鐘
 
 
 def clean_df(df, symbol):
@@ -33,58 +34,43 @@ def clean_df(df, symbol):
     return df
 
 
-def fetch_with_retry(func):
-    return retry(lambda: func(), retries=3, delay=1)
+def get_stock_data(symbol):
 
+    now = time.time()
 
-def get_stock_data(symbol, tf="1d"):
-    key = f"{symbol}_{tf}"
+    # 🔥 1️⃣ 記憶體快取（最快）
+    if symbol in _cache:
+        data, ts = _cache[symbol]
+        if now - ts < CACHE_TTL:
+            return data
 
-    # 🔥 ① Memory Cache
-    data = get_cache(key, tf)
-    if data is not None:
-        return data
-
-    # 🔥 ② Redis Cache（雲端）
-    data = get_redis(key)
-    if data is not None:
-        set_cache(key, data)
-        return data
-
-    # 🔥 ③ DB Cache
+    # 🔥 2️⃣ DB 快取
     df = load_from_db(symbol)
     if df is not None and len(df) > 50:
-        set_cache(key, df)
-        set_redis(key, df)
+        _cache[symbol] = (df, now)
         return df
 
-    # 🔥 ④ FinMind（retry + 限速）
+    # 🔥 3️⃣ FinMind（優先）
     try:
-        rate_limit("finmind", 1.2)
-        df = fetch_with_retry(lambda: fetch_finmind(symbol))
-
+        df = fetch_finmind(symbol)
         if df is not None and len(df) > 0:
             df = clean_df(df, symbol)
             save_to_db(symbol, df)
-            set_cache(key, df)
-            set_redis(key, df)
+            _cache[symbol] = (df, now)
             return df
-    except Exception as e:
-        print(f"FinMind error: {e}")
+    except:
+        pass
 
-    # 🔥 ⑤ Yahoo fallback
+    # 🔥 4️⃣ Yahoo（備援）
     try:
-        rate_limit("yahoo", 1.0)
-        df = fetch_with_retry(lambda: fetch_yahoo(symbol))
-
+        df = fetch_yahoo(symbol)
         if df is not None and len(df) > 0:
             df = clean_df(df, symbol)
             save_to_db(symbol, df)
-            set_cache(key, df)
-            set_redis(key, df)
+            _cache[symbol] = (df, now)
             return df
-    except Exception as e:
-        print(f"Yahoo error: {e}")
+    except:
+        pass
 
     return None
 
