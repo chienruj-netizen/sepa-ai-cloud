@@ -25,17 +25,15 @@ def get_institutional_flow(stock_id):
 
         recent = data[-3:]
 
-        total = 0
+        total = 0.0
 
         for d in recent:
-            val = d.get("buy_sell", "")
+            buy = float(d.get("buy", 0))
+            sell = float(d.get("sell", 0))
 
-            if val == "buy":
-                total += 1
-            elif val == "sell":
-                total -= 1
+            total += (buy - sell)
 
-        return float(total)
+        return total
 
     except Exception as e:
         print("❌ institution error:", e)
