@@ -9,15 +9,24 @@ def run():
 
     for s in stocks:
 
-        features = analyze_stock(s)
-        decision = make_decision(features)
+        try:
+            features = analyze_stock(s)
 
-        results.append({
-            "symbol": s["symbol"],
-            "signal": decision["action"],
-            "tp": decision["tp"],
-            "sl": decision["sl"]
-        })
+            if features is None:
+                continue
+
+            decision = make_decision(features)
+
+            results.append({
+                "symbol": s.get("symbol", "UNKNOWN"),
+                "signal": decision.get("action", "⚪"),
+                "tp": decision.get("tp", 0),
+                "sl": decision.get("sl", 0)
+            })
+
+        except Exception as e:
+            print(f"❌ Error processing {s}: {e}")
+            continue
 
     return {
         "market": "sideways",
