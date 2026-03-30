@@ -30,3 +30,4 @@ def predict_stock(features):
     long_score, _ = predict(features)
     return long_score
 
+# force update
