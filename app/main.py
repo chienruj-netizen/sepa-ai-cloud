@@ -1,14 +1,26 @@
-from app.pipeline import run_market_scan
-import os
+import time
+from app.core.selector import select_stocks
 
 def run():
+    try:
+        print("🚀 RUN START")
 
-    results = run_market_scan()
+        start = time.time()
 
-    model_status = "✅ ML模型" if os.path.exists("data/model.pkl") else "⚠️ 未載入模型"
+        stocks = select_stocks()
 
-    return {
-        "market": "AI模型預測",
-        "strategy": f"LightGBM + 多因子 + 雷達 ({model_status})",
-        "results": results
-    }
+        if not stocks:
+            return "⚠️ 今日無符合條件股票"
+
+        result = "📊 今日策略\n\n"
+
+        for s in stocks[:5]:
+            result += f"🚀 {s}\n"
+
+        print(f"⏱ 完成時間: {time.time()-start:.2f}s")
+
+        return result
+
+    except Exception as e:
+        print(f"❌ run error: {e}")
+        return f"❌ 系統錯誤: {e}"

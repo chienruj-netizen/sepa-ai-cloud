@@ -240,3 +240,22 @@ if os.path.exists(LOCK_FILE):
 with open(LOCK_FILE, "w") as f:
     f.write("locked")
 
+
+# ===== 🔥 非阻塞 AI 策略執行（完整修正） =====
+from app.interface.async_runner import run_async
+from app.main import run
+
+async def handle_strategy(update, context):
+    msg = await update.message.reply_text("🚀 AI分析中...")
+
+    try:
+        result = await run_async(lambda: run())
+
+        if not result:
+            result = "⚠️ 無結果（資料不足或無符合條件）"
+
+        await msg.edit_text(result)
+
+    except Exception as e:
+        await msg.edit_text(f"❌ 分析失敗: {e}")
+

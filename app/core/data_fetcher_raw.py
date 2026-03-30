@@ -1,60 +1,49 @@
+import yfinance as yf
 import requests
 import pandas as pd
-import yfinance as yf
 import os
+
+FINMIND_TOKEN = os.getenv("FINMIND_TOKEN")
+
+def fetch_yahoo(symbol):
+    try:
+        df = yf.download(symbol, period="6mo", progress=False, timeout=5)
+        return df
+    except Exception as e:
+        print(f"❌ Yahoo error: {e}")
+        return None
 
 
 def fetch_finmind(symbol):
-
-    token = os.getenv("FINMIND_TOKEN")
-
-    if not token:
-        return None
-
     try:
-        stock_id = symbol.replace(".TW", "")
-
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
             "dataset": "TaiwanStockPrice",
-            "data_id": stock_id,
+            "data_id": symbol.replace(".TW", ""),
             "start_date": "2023-01-01",
-            "token": token
+            "token": FINMIND_TOKEN
         }
 
-        res = requests.get(url, params=params)
-        data = res.json()["data"]
+        resp = requests.get(url, params=params, timeout=5)
 
+        if resp.status_code != 200:
+            return None
+
+        data = resp.json().get("data", [])
         if not data:
             return None
 
         df = pd.DataFrame(data)
-        df["date"] = pd.to_datetime(df["date"])
-        df.set_index("date", inplace=True)
-
-        df.rename(columns={
+        df = df.rename(columns={
             "open": "Open",
-            "high": "High",
-            "low": "Low",
+            "max": "High",
+            "min": "Low",
             "close": "Close",
-            "volume": "Volume"
-        }, inplace=True)
-
-        return df[["Open", "High", "Low", "Close", "Volume"]]
-
-    except:
-        return None
-
-
-def fetch_yahoo(symbol):
-
-    try:
-        df = yf.download(symbol, period="1y")
-
-        if df.empty:
-            return None
+            "Trading_Volume": "Volume"
+        })
 
         return df
 
-    except:
+    except Exception as e:
+        print(f"❌ FinMind error: {e}")
         return None
