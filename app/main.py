@@ -5,23 +5,15 @@ from app.core.decision import make_decision
 def run():
 
     stocks = pick_candidates()
-
     results = []
 
     for s in stocks:
 
-        symbol = s["symbol"]
-        df = s["df"]
-
-        features = analyze_stock(df)
-
-        if features is None:
-            continue
-
+        features = analyze_stock(s)
         decision = make_decision(features)
 
         results.append({
-            "symbol": symbol,
+            "symbol": s["symbol"],
             "signal": decision["action"],
             "tp": decision["tp"],
             "sl": decision["sl"]
