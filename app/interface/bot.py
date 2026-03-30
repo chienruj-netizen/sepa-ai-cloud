@@ -209,3 +209,34 @@ if os.path.exists(LOCK_FILE):
 with open(LOCK_FILE, "w") as f:
     f.write("locked")
 
+
+# ===== 🔥 全域錯誤處理（防止 crash） =====
+from telegram.ext import Application
+
+async def error_handler(update, context):
+    print(f"🚨 ERROR: {context.error}")
+
+def add_error_handler(app):
+    app.add_error_handler(error_handler)
+
+
+# ===== 🔥 掛錯誤 handler =====
+try:
+    add_error_handler(application)
+except Exception as e:
+    print(f"error handler 掛載失敗: {e}")
+
+
+# ===== 🔥 防止多實例（Render必備） =====
+import os
+import sys
+
+LOCK_FILE = "/tmp/bot.lock"
+
+if os.path.exists(LOCK_FILE):
+    print("⚠️ Bot already running, exit")
+    sys.exit()
+
+with open(LOCK_FILE, "w") as f:
+    f.write("locked")
+
