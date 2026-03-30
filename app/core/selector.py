@@ -1,17 +1,17 @@
 from app.core.ml_predictor import predict_stock
 from app.core.sepa_filter import apply_sepa_filter
+from app.core.tw_stock_list import get_tw_stocks
+from app.core.ai_optimizer import CONFIG
 
 
 def pick_candidates():
 
-    symbols = [
-        "2330.TW","2317.TW","2454.TW","2308.TW","2603.TW",
-        "2382.TW","3037.TW","3711.TW","3034.TW","3443.TW"
-    ]
+    symbols = get_tw_stocks()
 
     results = []
 
-    for s in symbols:
+    for s in symbols[:200]:
+
         try:
             ai = predict_stock(s)
             sepa = apply_sepa_filter(s)
@@ -19,25 +19,26 @@ def pick_candidates():
             if not ai:
                 continue
 
-            # 🔥 關鍵：一定要起漲
-            if not sepa["breakout"]:
-                continue
-
-            # 🔥 關鍵：不能是起跌
-            if sepa["reversal"]:
-                continue
-
             score = ai["prob"]
 
-            results.append({
-                "symbol": s,
-                "prob": score,
-                "breakout": True
-            })
+            # 🔥 動態門檻
+            if score > CONFIG["threshold"] and sepa["breakout"] and not sepa["reversal"]:
+                results.append({
+                    "symbol": s,
+                    "prob": score,
+                    "side": "LONG"
+                })
 
-        except Exception as e:
-            print(f"⚠️ 選股錯誤 {s}: {e}")
+            elif score < (1 - CONFIG["threshold"]) and sepa["reversal"]:
+                results.append({
+                    "symbol": s,
+                    "prob": score,
+                    "side": "SHORT"
+                })
 
-    results = sorted(results, key=lambda x: x["prob"], reverse=True)
+        except:
+            continue
 
-    return results[:2]
+    results = sorted(results, key=lambda x: abs(x["prob"] - 0.5), reverse=True)
+
+    return results[:CONFIG["top_k"]]

@@ -1,22 +1,54 @@
+from app.core.q_learning import update_q
 
-def optimize_model(results):
+CONFIG = {
+    "tp": 0.05,
+    "sl": -0.03,
+    "threshold": 0.7,
+    "top_k": 2
+}
 
-    print("🧠 AI 優化中...")
+
+def optimize_model(results, market):
 
     if not results:
-        print("⚠️ 無回測資料")
-        return
+        print("⚠️ 無資料")
+        return CONFIG
 
-    # 🔥 強制轉 float
-    avg = sum([float(r.get("ret", 0)) for r in results]) / len(results)
+    avg = sum([r["ret"] for r in results]) / len(results)
 
-    print(f"📊 平均報酬（優化用）: {round(avg,4)}")
+    print(f"📊 平均報酬: {round(avg,4)}")
 
-    if avg > 0:
-        print("📈 策略表現良好")
-    else:
-        print("⚠️ 策略需優化")
-        
+    # 🔥 狀態加入市場
+    state = f"{market}_tp:{CONFIG['tp']}_sl:{CONFIG['sl']}_th:{CONFIG['threshold']}"
+    score = update_q(state, avg)
 
-def load_best():
-    return None
+    print(f"🧠 Q值更新: {round(score,4)}")
+
+    # 🔥 牛市策略
+    if market == "bull":
+
+        if avg > 0:
+            CONFIG["tp"] = min(CONFIG["tp"] + 0.01, 0.1)
+            CONFIG["threshold"] = min(CONFIG["threshold"] + 0.02, 0.9)
+            print("📈 牛市 → 強攻")
+
+        else:
+            CONFIG["sl"] = max(CONFIG["sl"] - 0.01, -0.1)
+
+    # 🔥 熊市策略
+    elif market == "bear":
+
+        CONFIG["top_k"] = 1
+        CONFIG["threshold"] = 0.75
+        print("🐻 熊市 → 保守 or 放空")
+
+    # 🔥 震盪策略
+    elif market == "sideways":
+
+        CONFIG["top_k"] = 1
+        CONFIG["threshold"] = 0.8
+        print("🌀 震盪 → 少做")
+
+    print(f"⚙️ 新參數: {CONFIG}")
+
+    return CONFIG

@@ -1,37 +1,32 @@
-from app.pipeline import run_market_scan
-from app.core.backtest_engine import run_backtest
-from app.core.performance import analyze_performance
-from app.core.ai_optimizer import save_best
-from app.core.optimizer import optimize
+import joblib
+import os
 
-def run_learning_cycle():
+from app.core.ml_trainer import train_models
+from app.core.performance import evaluate_performance
 
-    print("🧠 Learning cycle start")
 
-    # 1️⃣ 選股
-    picks = run_market_scan()
+MODEL_PATH = "data/model_v8.pkl"
 
-    if not picks:
-        return "⚠️ 無選股"
 
-    symbol = picks[0]["symbol"]
+def learning_loop(results):
 
-    # 2️⃣ 回測
-    df = run_backtest(symbol)
+    print("\n🧠 ===== Learning Loop =====")
 
-    # 3️⃣ 分析績效
-    perf = analyze_performance(df)
+    if not results:
+        print("⚠️ 無交易資料，跳過學習")
+        return
 
-    print("📊 回測結果:", perf)
+    ev = evaluate_performance(results)
 
-    # 4️⃣ 優化
-    best, score = optimize()
+    # 🔥 若策略有效 → 更新模型
+    if ev > 0:
+        print("📈 EV > 0 → 強化模型")
 
-    # 5️⃣ 儲存最佳參數
-    save_best(best)
+        model = train_models()
 
-    return {
-        "symbol": symbol,
-        "performance": perf,
-        "best": best
-    }
+        joblib.dump(model, MODEL_PATH)
+
+        print("✅ 新模型已儲存")
+
+    else:
+        print("⚠️ EV <= 0 → 保留舊模型")

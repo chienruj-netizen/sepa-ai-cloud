@@ -1,11 +1,8 @@
 import time
 import yfinance as yf
+
 from app.core.data_fetcher_raw import fetch_finmind
-
-
-TP = 0.05   # +5%
-SL = -0.03  # -3%
-MAX_HOLD_DAYS = 5
+from app.core.ai_optimizer import CONFIG   # 🔥 動態參數
 
 
 def safe_fetch(symbol):
@@ -14,6 +11,7 @@ def safe_fetch(symbol):
         df = yf.download(symbol, period="6mo", interval="1d")
 
         if df is not None and len(df) > 30:
+
             if hasattr(df.columns, "levels"):
                 df.columns = df.columns.get_level_values(0)
 
@@ -34,26 +32,32 @@ def safe_fetch(symbol):
     return fetch_finmind(symbol)
 
 
-def simulate_trade(close_prices):
+def simulate_trade(df):
 
-    entry_price = float(close_prices.iloc[-6])
+    close = df["close"] if "close" in df.columns else df["Close"]
+    high = df["high"] if "high" in df.columns else df["High"]
+    low = df["low"] if "low" in df.columns else df["Low"]
+
+    entry = float(close.iloc[-6])
+
+    TP = CONFIG["tp"]   # 🔥 動態 TP
+    SL = CONFIG["sl"]   # 🔥 動態 SL
 
     for i in range(-5, 0):
 
-        price = float(close_prices.iloc[i])
-        ret = (price - entry_price) / entry_price
+        h = float(high.iloc[i])
+        l = float(low.iloc[i])
 
-        # 🔥 TP
-        if ret >= TP:
-            return ret, "TP"
+        # 🔥 停利
+        if (h - entry) / entry >= TP:
+            return TP, "TP"
 
-        # 🔥 SL
-        if ret <= SL:
-            return ret, "SL"
+        # 🔥 停損
+        if (l - entry) / entry <= SL:
+            return SL, "SL"
 
-    # 🔥 到期出場
-    final_price = float(close_prices.iloc[-1])
-    ret = (final_price - entry_price) / entry_price
+    final = float(close.iloc[-1])
+    ret = (final - entry) / entry
 
     return ret, "TIME"
 
@@ -77,9 +81,11 @@ def run_backtest(decisions):
             if df is None or len(df) < 30:
                 continue
 
-            close = df["close"] if "close" in df.columns else df["Close"]
+            ret, reason = simulate_trade(df)
 
-            ret, reason = simulate_trade(close)
+            # 🔥 做空處理
+            if d.get("action") == "SELL":
+                ret = -ret
 
             results.append({
                 "symbol": symbol,
