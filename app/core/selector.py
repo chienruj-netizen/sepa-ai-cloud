@@ -19,26 +19,25 @@ def pick_candidates():
             if not ai:
                 continue
 
-            score = ai["prob"]
+            # 🔥 關鍵：一定要起漲
+            if not sepa["breakout"]:
+                continue
 
-            # 🔥 融合邏輯（關鍵）
-            if sepa["breakout"]:
-                score += 0.1
-
+            # 🔥 關鍵：不能是起跌
             if sepa["reversal"]:
-                score -= 0.1
+                continue
+
+            score = ai["prob"]
 
             results.append({
                 "symbol": s,
                 "prob": score,
-                "breakout": sepa["breakout"],
-                "reversal": sepa["reversal"]
+                "breakout": True
             })
 
         except Exception as e:
             print(f"⚠️ 選股錯誤 {s}: {e}")
 
-    # 🔥 排序
     results = sorted(results, key=lambda x: x["prob"], reverse=True)
 
-    return results[:2]   # 🔥 Top 2
+    return results[:2]
