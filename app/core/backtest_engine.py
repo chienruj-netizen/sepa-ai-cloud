@@ -1,4 +1,40 @@
+import time
 import yfinance as yf
+
+from app.core.data_fetcher_raw import fetch_finmind
+
+
+def safe_fetch(symbol):
+    """
+    🔥 Yahoo → FinMind fallback
+    """
+
+    try:
+        df = yf.download(symbol, period="6mo", interval="1d")
+
+        if df is not None and len(df) > 30:
+            # flatten MultiIndex
+            if hasattr(df.columns, "levels"):
+                df.columns = df.columns.get_level_values(0)
+
+            df = df.rename(columns={
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume"
+            })
+
+            return df
+
+    except Exception as e:
+        print(f"⚠️ Yahoo失敗 {symbol}: {e}")
+
+    # 🔥 fallback FinMind
+    print(f"🔁 使用 FinMind: {symbol}")
+    df = fetch_finmind(symbol)
+
+    return df
 
 
 def run_backtest(decisions):
@@ -7,7 +43,7 @@ def run_backtest(decisions):
 
     for d in decisions:
 
-        # 🔥 只回測有進場的（關鍵升級）
+        # 🔥 只回測有進場
         if d.get("position", 0) == 0:
             continue
 
@@ -16,17 +52,17 @@ def run_backtest(decisions):
         if not symbol:
             continue
 
+        # 🔥 防 Rate Limit
+        time.sleep(1)
+
         try:
-            df = yf.download(symbol, period="6mo", interval="1d")
+            df = safe_fetch(symbol)
 
             if df is None or len(df) < 30:
+                print(f"⚠️ 無資料 {symbol}")
                 continue
 
-            # 🔥 解 MultiIndex
-            if hasattr(df.columns, "levels"):
-                df.columns = df.columns.get_level_values(0)
-
-            close = df["Close"]
+            close = df["close"] if "close" in df.columns else df["Close"]
 
             entry = close.iloc[-5]
             exit_price = close.iloc[-1]
