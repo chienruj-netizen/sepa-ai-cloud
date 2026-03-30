@@ -15,18 +15,25 @@ register_handlers(application)
 
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
+    try:
+        data = request.get_json(force=True)
 
-    asyncio.run(application.process_update(update))
-    return "ok"
+        update = Update.de_json(data, application.bot)
+
+        asyncio.run(application.process_update(update))
+
+        return "ok"
+
+    except Exception as e:
+        print(f"❌ webhook error: {e}")
+        return "error", 200   # ⚠️ 一定要回200
+
 
 @app.route("/")
 def index():
     return "Bot is running 🚀"
 
 
-# 🔥 關鍵：一定要用 Render PORT
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
