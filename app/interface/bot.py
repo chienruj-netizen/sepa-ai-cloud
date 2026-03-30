@@ -170,3 +170,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ===== 🔥 System Health Check（自動加入） =====
+from app.core.system_health import system_status
+from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+
+async def system_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    s = system_status()
+    msg = (
+        "🛡 系統狀態\n"
+        f"時間: {s['time']}\n"
+        f"API: {s['api']}\n"
+    )
+    await update.message.reply_text(msg)
+
+def add_system_handler(app):
+    app.add_handler(CommandHandler("status", system_check))
+
+
+# ===== 🔥 自動掛載 system handler =====
+try:
+    add_system_handler(application)
+except Exception as e:
+    print(f"⚠️ system handler 掛載失敗: {e}")
+
