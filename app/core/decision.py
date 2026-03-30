@@ -1,38 +1,30 @@
+def make_decision(candidate, trend="bull", prob=0.5):
 
-def make_decision(symbol, trend=None, score=None):
+    symbol = candidate.get("symbol")
 
-    if score is None:
-        score = 0.5
+    # 🔥 做多
+    if prob >= 0.7:
+        return {
+            "symbol": symbol,
+            "action": "BUY",
+            "side": "LONG",
+            "score": prob
+        }
 
-    # 🔥 分級（關鍵）
-    if score >= 0.75:
-        action = "STRONG_BUY"
-        position = 1.0
-    elif score >= 0.65:
-        action = "BUY"
-        position = 0.5
-    elif score >= 0.5:
-        action = "HOLD"
-        position = 0
+    # 🔥 做空（關鍵）
+    elif prob <= 0.3:
+        return {
+            "symbol": symbol,
+            "action": "SELL",
+            "side": "SHORT",
+            "score": prob
+        }
+
+    # 🔥 不動
     else:
-        action = "SELL"
-        position = 0
-
-    # 🔥 交易策略
-    entry = "next_open" if position > 0 else None
-    tp = "+5%" if position > 0 else None
-    sl = "-3%" if position > 0 else None
-
-    decision = {
-        "symbol": symbol,
-        "action": action,
-        "score": round(score, 3),
-        "position": position,
-        "entry": entry,
-        "tp": tp,
-        "sl": sl
-    }
-
-    print(f"📌 {symbol} → {action} (score={score})")
-
-    return decision
+        return {
+            "symbol": symbol,
+            "action": "HOLD",
+            "side": "NONE",
+            "score": prob
+        }
