@@ -5,4 +5,4 @@ numpy
 requests
 openai
 apscheduler
-ta   ← ⭐ 加這個
+ta
