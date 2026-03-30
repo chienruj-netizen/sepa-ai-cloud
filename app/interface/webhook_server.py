@@ -10,23 +10,29 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 app = Flask(__name__)
 
+# 🔥 建立 event loop（關鍵）
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 application = ApplicationBuilder().token(TOKEN).build()
 register_handlers(application)
+
+# 🔥 初始化 Application（關鍵）
+loop.run_until_complete(application.initialize())
 
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
-
         update = Update.de_json(data, application.bot)
 
-        asyncio.run(application.process_update(update))
+        loop.run_until_complete(application.process_update(update))
 
         return "ok"
 
     except Exception as e:
         print(f"❌ webhook error: {e}")
-        return "error", 200   # ⚠️ 一定要回200
+        return "ok", 200
 
 
 @app.route("/")
