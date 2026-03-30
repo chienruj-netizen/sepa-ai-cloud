@@ -1,44 +1,42 @@
-from app.core.ml_predictor import predict_stock
-from app.core.sepa_filter import apply_sepa_filter
-from app.core.tw_stock_list import get_tw_stocks
-from app.core.ai_optimizer import CONFIG
+from app.core.ml_predictor import predict
+from app.core.data_fetcher import fetch_stock_data
 
+SYMBOLS = ["2330.TW","2317.TW","1308.TW","2603.TW","2409.TW"]
 
-def pick_candidates():
+def select_stocks():
 
-    symbols = get_tw_stocks()
+    long_list = []
+    short_list = []
 
-    results = []
+    for symbol in SYMBOLS:
 
-    for s in symbols[:200]:
-
-        try:
-            ai = predict_stock(s)
-            sepa = apply_sepa_filter(s)
-
-            if not ai:
-                continue
-
-            score = ai["prob"]
-
-            # 🔥 動態門檻
-            if score > CONFIG["threshold"] and sepa["breakout"] and not sepa["reversal"]:
-                results.append({
-                    "symbol": s,
-                    "prob": score,
-                    "side": "LONG"
-                })
-
-            elif score < (1 - CONFIG["threshold"]) and sepa["reversal"]:
-                results.append({
-                    "symbol": s,
-                    "prob": score,
-                    "side": "SHORT"
-                })
-
-        except:
+        df = fetch_stock_data(symbol)
+        if df is None or len(df) < 50:
             continue
 
-    results = sorted(results, key=lambda x: abs(x["prob"] - 0.5), reverse=True)
+        close = df["close"].iloc[-1]
+        ma20 = df["close"].rolling(20).mean().iloc[-1]
 
-    return results[:CONFIG["top_k"]]
+        features = [
+            close / ma20
+        ]
+
+        long_score, short_score = predict(features)
+
+        data = {
+            "symbol": symbol,
+            "price": close,
+            "long": long_score,
+            "short": short_score
+        }
+
+        if long_score > 0.7:
+            long_list.append(data)
+
+        if short_score > 0.7:
+            short_list.append(data)
+
+    long_list = sorted(long_list, key=lambda x: x["long"], reverse=True)
+    short_list = sorted(short_list, key=lambda x: x["short"], reverse=True)
+
+    return long_list[:3], short_list[:3]
