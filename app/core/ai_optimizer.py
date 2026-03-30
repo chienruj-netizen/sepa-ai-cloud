@@ -1,21 +1,22 @@
-import json
-import os
 
-FILE = "best_config.json"
+def optimize_model(results):
 
+    print("🧠 AI 優化中...")
 
-def save_best(params):
-    with open(FILE, "w") as f:
-        json.dump(params, f)
+    if not results:
+        print("⚠️ 無回測資料")
+        return
 
+    # 🔥 強制轉 float
+    avg = sum([float(r.get("ret", 0)) for r in results]) / len(results)
+
+    print(f"📊 平均報酬（優化用）: {round(avg,4)}")
+
+    if avg > 0:
+        print("📈 策略表現良好")
+    else:
+        print("⚠️ 策略需優化")
+        
 
 def load_best():
-
-    if not os.path.exists(FILE):
-        return {
-            "threshold": 0.6,
-            "vol_ratio": 1.2
-        }
-
-    with open(FILE, "r") as f:
-        return json.load(f)
+    return None

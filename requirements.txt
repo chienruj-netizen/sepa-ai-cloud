@@ -6,3 +6,6 @@ ta
 requests
 lightgbm
 joblib
+scikit-learn
+openai
+python-dotenv

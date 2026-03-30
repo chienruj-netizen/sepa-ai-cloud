@@ -1,69 +1,79 @@
-import joblib
-import os
-
-MODEL_RETURN_PATH = "data/model_return.pkl"
-MODEL_VOL_PATH = "data/model_vol.pkl"
-
-model_return = None
-model_vol = None
+import pandas as pd
+from app.core.data_fetcher import fetch_stock_data
+from app.core.ml_trainer import train_models
 
 
-# ========================
-# 🔥 載入模型（雙模型）
-# ========================
-def load_models():
-    global model_return, model_vol
+# 🔥 共用標準化（跟 trainer 一樣）
+def normalize_columns(df):
+    df.columns = [str(c).lower() for c in df.columns]
 
-    if model_return is None and os.path.exists(MODEL_RETURN_PATH):
-        model_return = joblib.load(MODEL_RETURN_PATH)
+    new_cols = {}
+    for col in df.columns:
+        if "open" in col:
+            new_cols[col] = "open"
+        elif "high" in col:
+            new_cols[col] = "high"
+        elif "low" in col:
+            new_cols[col] = "low"
+        elif "close" in col:
+            new_cols[col] = "close"
+        elif "volume" in col:
+            new_cols[col] = "volume"
 
-    if model_vol is None and os.path.exists(MODEL_VOL_PATH):
-        model_vol = joblib.load(MODEL_VOL_PATH)
+    df = df.rename(columns=new_cols)
+    return df
 
 
-# ========================
-# 🔥 預測（V7核心）
-# ========================
-def predict_return(features):
+# 🔥 模型（先簡單）
+model = train_models()
 
-    load_models()
 
-    # ❗ fallback（避免全系統壞掉）
-    if model_return is None:
-        return 0.01
+def build_features(df):
+    df = normalize_columns(df)
 
-    try:
-        # 🔥 特徵工程（補齊）
-        rsi = features.get("rsi", 50)
-        vol_ratio = features.get("volume_ratio", 1)
-        ma20 = features.get("ma20", 0)
-        volatility = features.get("volatility", abs(rsi - 50))
-        institution = features.get("institution", 0)
+    required = ["open", "high", "low", "close", "volume"]
+    for col in required:
+        if col not in df.columns:
+            raise ValueError(f"缺少欄位: {col}, 目前: {df.columns}")
 
-        X = [[
-            rsi,
-            vol_ratio,
-            ma20,
-            volatility,
-            institution
-        ]]
+    df["ma5"] = df["close"].rolling(5).mean()
+    df["ma20"] = df["close"].rolling(20).mean()
+    df["return"] = df["close"].pct_change()
 
-        # 🔥 主模型（報酬）
-        pred_return = model_return.predict(X)[0]
+    df = df.dropna()
+    return df
 
-        # 🔥 波動模型（風險）
-        if model_vol:
-            pred_vol = model_vol.predict(X)[0]
-        else:
-            pred_vol = 0
 
-        # ========================
-        # 🔥 Ensemble（關鍵）
-        # ========================
-        score = (0.7 * pred_return) - (0.3 * pred_vol)
+def predict_stock(symbol):
+    df = fetch_stock_data(symbol)
 
-        return float(score)
+    if df is None or len(df) < 50:
+        return None
 
-    except Exception as e:
-        print("ML ERROR:", e)
-        return 0.01
+    df = build_features(df)
+
+    latest = df.iloc[-1]
+
+    X = [[
+        latest["open"],
+        latest["high"],
+        latest["low"],
+        latest["close"],
+        latest["volume"],
+        latest["ma5"],
+        latest["ma20"]
+    ]]
+
+    prob = model.predict_proba(X)[0][1]
+
+    return {
+        "symbol": symbol,
+        "prob": round(prob, 3),
+        "price": latest["close"]
+    }
+
+
+if __name__ == "__main__":
+    print("🚀 預測中...")
+    result = predict_stock("2330.TW")
+    print(result)
