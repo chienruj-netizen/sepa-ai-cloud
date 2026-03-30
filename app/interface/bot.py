@@ -1,4 +1,6 @@
 import os
+import asyncio
+
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -9,6 +11,9 @@ from app.core.ml_predictor import predict_stock
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# ======================
+# UI
+# ======================
 main_keyboard = [
     ["📊 今日策略"],
     ["🔍 單股分析"],
@@ -16,11 +21,9 @@ main_keyboard = [
     ["⚙️ 系統狀態"]
 ]
 
-
 # ======================
 # 工具
 # ======================
-
 def calc_metrics(prob, tp, sl):
 
     ev = (prob * tp) - ((1 - prob) * abs(sl))
@@ -32,13 +35,12 @@ def calc_metrics(prob, tp, sl):
     else:
         level = "🔴 高風險"
 
-    return round(ev,4), level
+    return round(ev, 4), level
 
 
 # ======================
 # 主選單
 # ======================
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
     await update.message.reply_text("🤖 AI操盤系統已啟動", reply_markup=reply_markup)
@@ -47,17 +49,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================
 # 核心
 # ======================
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text
 
-    # 📊 今日策略
+    # ======================
+    # 📊 今日策略（🔥修正不卡）
+    # ======================
     if text == "📊 今日策略":
 
         await update.message.reply_text("🚀 AI分析中...")
 
-        trades = run_pipeline()
+        loop = asyncio.get_event_loop()
+        trades = await loop.run_in_executor(None, run_pipeline)
 
         if not trades:
             await update.message.reply_text("⚠️ 今日無交易機會")
@@ -71,8 +75,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tp = CONFIG["tp"]
             sl = CONFIG["sl"]
 
-            prob = t["prob"]
-            price = t["price"]
+            prob = float(t["prob"])
+            price = float(t["price"])
 
             if t["side"] == "LONG":
                 tp_price = price * (1 + tp)
@@ -95,16 +99,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(msg)
 
+    # ======================
     # 🔍 單股分析
+    # ======================
     elif text == "🔍 單股分析":
         await update.message.reply_text("請輸入股票代碼，例如：2330.TW")
 
-    # 🔥 👉 新增：單股輸入判斷
     elif ".TW" in text:
 
         await update.message.reply_text("🔍 分析中...")
 
-        result = predict_stock(text)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, predict_stock, text)
 
         if not result:
             await update.message.reply_text("⚠️ 無資料")
@@ -126,12 +132,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(msg)
 
-    # 🌍 市場
+    # ======================
+    # 🌍 市場判斷
+    # ======================
     elif text == "🌍 市場判斷":
         market = get_market_regime()
         await update.message.reply_text(f"🌍 市場狀態：{market}")
 
-    # ⚙️ 系統
+    # ======================
+    # ⚙️ 系統狀態
+    # ======================
     elif text == "⚙️ 系統狀態":
 
         msg = "⚙️ 系統參數\n\n"
@@ -149,7 +159,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================
 # 啟動
 # ======================
-
 def main():
     app = Application.builder().token(TOKEN).build()
 
