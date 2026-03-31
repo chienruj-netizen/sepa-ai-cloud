@@ -1,40 +1,23 @@
-from app.core.backtest_engine import run_backtest
-from app.core.performance import analyze_performance
+import pandas as pd
+import os
 
+FILE = "trades.csv"
 
-def optimize():
+def suggest_params():
 
-    best_score = -999
-    best_params = None
+    if not os.path.exists(FILE):
+        return "尚無數據"
 
-    # 🔥 搜尋空間（你可以調整）
-    thresholds = [0.5, 0.6, 0.7]
-    vol_levels = [1.1, 1.2, 1.3]
+    df = pd.read_csv(FILE)
 
-    results_log = []
+    if len(df) == 0:
+        return "尚無交易"
 
-    for t in thresholds:
-        for v in vol_levels:
+    win_rate = (df["result"] == 1).mean()
 
-            # 👉 暫時用 global（簡單版）
-            config = {
-                "threshold": t,
-                "vol_ratio": v
-            }
-
-            df = run_backtest("2330.TW")
-
-            perf = analyze_performance(df)
-
-            score = perf["total_return"]
-
-            results_log.append({
-                "params": config,
-                "performance": perf
-            })
-
-            if score > best_score:
-                best_score = score
-                best_params = config
-
-    return best_params, results_log
+    if win_rate < 0.5:
+        return "🔻 勝率低 → 提高條件：vol_ratio > 1.5"
+    elif win_rate < 0.6:
+        return "⚖️ 正常 → 微調 acceleration 條件"
+    else:
+        return "🚀 勝率佳 → 可增加倉位"

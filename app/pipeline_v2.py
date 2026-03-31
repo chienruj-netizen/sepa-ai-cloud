@@ -1,37 +1,36 @@
-from app.core.selector import pick_candidates
+from app.core.selector import scan_market
 from app.core.decision import make_decision
 from app.core.data_fetcher import get_stock_data
-
+from app.core.portfolio import open_position
 
 def run_pipeline():
 
-    candidates = pick_candidates()
-
-    # 🔥 限制數量（避免卡）
-    candidates = candidates[:3]
+    candidates = scan_market(mode="trade")
 
     trades = []
 
     for c in candidates:
 
-        d = make_decision(c, "bull", c["prob"])
+        decision = make_decision(c, "bull", c["score"])
 
-        # 🔥 重點：只排除 HOLD
-        if d["action"] == "HOLD":
+        if decision["action"] == "HOLD":
             continue
 
         df = get_stock_data(c["symbol"])
 
-        if df is None or len(df) == 0:
+        # 🔥 關鍵防呆（close錯誤終結）
+        if df is None or "close" not in df.columns:
             continue
 
         price = float(df["close"].iloc[-1])
 
+        open_position(c["symbol"], price, decision["action"])
+
         trades.append({
             "symbol": c["symbol"],
-            "prob": c["prob"],
-            "side": d["side"],  # 🔥 用 decision 的
-            "price": price
+            "price": price,
+            "prob": c["score"],
+            "action": decision["action"]
         })
 
     return trades

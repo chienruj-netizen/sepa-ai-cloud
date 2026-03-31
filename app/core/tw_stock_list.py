@@ -1,11 +1,20 @@
 import requests
 
-def get_tw_stocks():
+def get_all_stocks():
+
     url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 
     try:
-        data = requests.get(url, timeout=10).json()
-        symbols = [d["Code"] + ".TW" for d in data if len(d["Code"]) == 4]
+        data = requests.get(url).json()
+
+        symbols = []
+
+        for d in data:
+            code = d.get("Code")
+            if code and len(code) == 4:
+                symbols.append(f"{code}.TW")
+
         return symbols
+
     except:
         return []

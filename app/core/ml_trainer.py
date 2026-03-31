@@ -1,82 +1,74 @@
 import pandas as pd
+import numpy as np
+import joblib
 from app.core.data_fetcher import fetch_stock_data
+from app.core.indicators import calc_indicators
+
+SYMBOLS = ["2330.TW","2317.TW","1308.TW","2603.TW","2409.TW"]
 
 
-def normalize_columns(df):
-    # 🔥 統一欄位（不管來源）
-    df.columns = [str(c).lower() for c in df.columns]
+def build_dataset():
 
-    mapping = {
-        "open": "open",
-        "high": "high",
-        "low": "low",
-        "close": "close",
-        "volume": "volume"
-    }
+    rows = []
 
-    # 找相似欄位
-    new_cols = {}
-    for col in df.columns:
-        if "open" in col:
-            new_cols[col] = "open"
-        elif "high" in col:
-            new_cols[col] = "high"
-        elif "low" in col:
-            new_cols[col] = "low"
-        elif "close" in col:
-            new_cols[col] = "close"
-        elif "volume" in col:
-            new_cols[col] = "volume"
+    for symbol in SYMBOLS:
 
-    df = df.rename(columns=new_cols)
+        df = fetch_stock_data(symbol)
+
+        if df is None or len(df) < 80:
+            continue
+
+        df = calc_indicators(df)
+
+        for i in range(30, len(df)-5):
+
+            row = df.iloc[i]
+            future = df.iloc[i+5]["close"]
+
+            target = 1 if future > row["close"] else 0
+
+            # 🔥 三大特徵
+            ma_ratio = row["close"] / row["ma20"] if row["ma20"] else 1
+
+            vol_ma20 = df["volume"].rolling(20).mean().iloc[i]
+            vol_ratio = row["volume"] / vol_ma20 if vol_ma20 else 1
+
+            momentum_short = df["close"].pct_change().rolling(3).mean().iloc[i]
+            momentum_long = df["close"].pct_change().rolling(6).mean().iloc[i]
+            acceleration = momentum_short - momentum_long
+
+            rows.append([
+                row["rsi"],
+                row["macd"],
+                ma_ratio,
+                vol_ratio,
+                acceleration,
+                target
+            ])
+
+    df = pd.DataFrame(rows, columns=[
+        "rsi","macd","ma_ratio","vol_ratio","acceleration","target"
+    ])
 
     return df
 
 
-def build_dataset(symbol="2330.TW"):
-    df = fetch_stock_data(symbol)
-
-    if df is None or len(df) < 50:
-        raise ValueError("資料不足")
-
-    # 🔥 強制標準化
-    df = normalize_columns(df)
-
-    required = ["open", "high", "low", "close", "volume"]
-
-    for col in required:
-        if col not in df.columns:
-            raise ValueError(f"缺少欄位: {col}，目前欄位: {df.columns}")
-
-    # 🔥 特徵工程
-    df["return"] = df["close"].pct_change()
-    df["ma5"] = df["close"].rolling(5).mean()
-    df["ma20"] = df["close"].rolling(20).mean()
-
-    df = df.dropna()
-
-    X = df[["open", "high", "low", "close", "volume", "ma5", "ma20"]]
-    y = (df["return"] > 0).astype(int)
-
-    return X, y
-
-
-def train_models():
-    X, y = build_dataset()
-
-    print("📊 Dataset:", X.shape)
-    print("🎯 Label:", y.shape)
+def train():
 
     from sklearn.ensemble import RandomForestClassifier
 
-    model = RandomForestClassifier()
+    df = build_dataset()
+
+    X = df[["rsi","macd","ma_ratio","vol_ratio","acceleration"]]
+    y = df["target"]
+
+    model = RandomForestClassifier(n_estimators=200)
     model.fit(X, y)
 
-    print("✅ Model training complete")
+    joblib.dump(model, "data/model_v3.pkl")
 
-    return model
+    print("✅ 模型訓練完成:", X.shape)
 
 
 if __name__ == "__main__":
-    print("🚀 開始訓練模型...")
-    model = train_models()
+    train()

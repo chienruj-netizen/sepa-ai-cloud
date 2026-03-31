@@ -4,21 +4,21 @@ import os
 FILE = "trades.csv"
 
 def get_performance():
+
     if not os.path.exists(FILE):
-        return {}
+        return "尚無交易紀錄"
 
     df = pd.read_csv(FILE)
 
-    df = df.dropna()
-
     if len(df) == 0:
-        return {}
+        return "尚無交易"
 
     win_rate = (df["result"] == 1).mean()
-    avg_return = df["result"].mean()
+    avg_return = df["pnl"].mean()
 
-    return {
-        "trades": len(df),
-        "win_rate": round(win_rate, 2),
-        "avg_return": round(avg_return, 3)
-    }
+    return f"""
+📊 交易統計
+總筆數：{len(df)}
+勝率：{round(win_rate,2)}
+平均報酬：{round(avg_return,3)}
+"""

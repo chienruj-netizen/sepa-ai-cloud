@@ -1,87 +1,138 @@
 from app.core.data_fetcher import fetch_stock_data
 from app.core.indicators import calc_indicators
 from app.core.ml_predictor import predict
-from app.core.market_regime import get_market_regime
+from app.core.tw_stock_list import get_all_stocks
+import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-SYMBOLS = ["2330.TW","2317.TW","1308.TW","2603.TW","2409.TW","1582.TW","1528.TW"]
 
-def select_stocks():
+def scan_market(mode="observe"):
 
-    regime = get_market_regime()
+    symbols = get_all_stocks()
 
-    long_list = []
-    short_list = []
+    temp = []
 
-    for symbol in SYMBOLS:
+    # ===== 🚀 STEP 1：並行抓資料 =====
+    def fetch_basic(symbol):
+
+        if symbol.startswith("00"):
+            return None
 
         df = fetch_stock_data(symbol)
-        if df is None or len(df) < 50:
-            continue
 
-        df = calc_indicators(df)
+        if df is None or len(df) < 30:
+            return None
 
-        row = df.iloc[-1]
+        if "close" not in df.columns or "volume" not in df.columns:
+            return None
 
-        close = row["close"]
-        ma20 = row["ma20"]
-        rsi = row["rsi"]
-        macd = row["macd"]
+        try:
+            close = float(df["close"].iloc[-1])
+            prev = float(df["close"].iloc[-2])
+            vol = float(df["volume"].iloc[-1])
+        except:
+            return None
 
-        ma_ratio = close / ma20 if ma20 else 1
+        if prev == 0:
+            return None
 
-        long_score, short_score = predict([rsi, macd, ma_ratio])
+        change = (close - prev) / prev
+        vol_std = df["close"].pct_change().rolling(10).std().iloc[-1]
 
-        data = {
+        return {
             "symbol": symbol,
-            "price": round(close,2),
-            "long": round(long_score,2),
-            "short": round(short_score,2)
+            "volume": vol,
+            "change": change,
+            "volatility": vol_std
         }
 
-        if regime == "bull":
-            if long_score > 0.7:
-                long_list.append(data)
 
-        elif regime == "bear":
-            if short_score > 0.7:
-                short_list.append(data)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(fetch_basic, s) for s in symbols]
 
-        else:
-            if long_score > 0.75:
-                long_list.append(data)
-            if short_score > 0.75:
-                short_list.append(data)
+        for f in as_completed(futures):
+            res = f.result()
+            if res:
+                temp.append(res)
 
-    long_list = sorted(long_list, key=lambda x: x["long"], reverse=True)
-    short_list = sorted(short_list, key=lambda x: x["short"], reverse=True)
+    df_rank = pd.DataFrame(temp)
 
-    return regime, long_list[:3], short_list[:3]
+    if len(df_rank) == 0:
+        return []
+
+    # ===== 篩選 =====
+    df_rank = df_rank.sort_values("volume", ascending=False).head(300)
+    df_rank = df_rank.sort_values("change", ascending=False).head(200)
+    df_rank = df_rank[df_rank["volatility"] > 0.01]
+
+    symbols = df_rank["symbol"].tolist()
+
+    results = []
+
+    # ===== 🚀 STEP 2：並行 AI 計算 =====
+    def analyze_symbol(symbol):
+
+        df = fetch_stock_data(symbol)
+
+        if df is None or len(df) < 60:
+            return None
+
+        df = calc_indicators(df)
+        row = df.iloc[-1]
+
+        try:
+            close = row["close"]
+            ma20 = row["ma20"]
+            rsi = row["rsi"]
+            macd = row["macd"]
+            volume = row["volume"]
+        except:
+            return None
+
+        if ma20 == 0:
+            return None
+
+        ma_ratio = close / ma20
+
+        vol_ma20 = df["volume"].rolling(20).mean().iloc[-1]
+        if vol_ma20 == 0:
+            return None
+
+        vol_ratio = volume / vol_ma20
+
+        momentum_short = df["close"].pct_change().rolling(3).mean().iloc[-1]
+        momentum_long = df["close"].pct_change().rolling(6).mean().iloc[-1]
+
+        acceleration = momentum_short - momentum_long
+
+        features = [rsi, macd, ma_ratio, vol_ratio, acceleration]
+
+        prob = predict(features)
+
+        if mode == "observe" and prob < 0.55:
+            return None
+
+        if mode == "trade":
+            if prob < 0.6 or close < ma20 or vol_ratio < 1.2 or acceleration < 0:
+                return None
+
+        return {
+            "symbol": symbol,
+            "score": round(prob,3),
+            "entry": round(close,2),
+            "tp": round(close*1.05,2),
+            "sl": round(close*0.97,2)
+        }
 
 
-# ===== 🔥 相容舊 pipeline（關鍵修復） =====
-def pick_candidates():
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(analyze_symbol, s) for s in symbols]
 
-    regime, long_list, short_list = select_stocks()
+        for f in as_completed(futures):
+            res = f.result()
+            if res:
+                results.append(res)
 
-    result = []
+    results = sorted(results, key=lambda x: x["score"], reverse=True)
 
-    for s in long_list:
-        result.append({
-            "symbol": s["symbol"],
-            "score": s["long"],
-            "entry": s["price"],
-            "tp": round(s["price"] * 1.05, 2),
-            "sl": round(s["price"] * 0.97, 2)
-        })
-
-    for s in short_list:
-        result.append({
-            "symbol": s["symbol"],
-            "score": s["short"],
-            "entry": s["price"],
-            "tp": round(s["price"] * 0.95, 2),
-            "sl": round(s["price"] * 1.03, 2)
-        })
-
-    return result
-
+    return results[:5]

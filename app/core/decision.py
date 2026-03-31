@@ -2,8 +2,8 @@ def make_decision(candidate, trend="bull", prob=0.5):
 
     symbol = candidate.get("symbol")
 
-    # 🔥 做多
-    if prob >= 0.7:
+    # 🔥 放寬條件（讓系統動起來）
+    if prob >= 0.52:
         return {
             "symbol": symbol,
             "action": "BUY",
@@ -11,8 +11,7 @@ def make_decision(candidate, trend="bull", prob=0.5):
             "score": prob
         }
 
-    # 🔥 做空（關鍵）
-    elif prob <= 0.3:
+    elif prob <= 0.48:
         return {
             "symbol": symbol,
             "action": "SELL",
@@ -20,11 +19,11 @@ def make_decision(candidate, trend="bull", prob=0.5):
             "score": prob
         }
 
-    # 🔥 不動
     else:
+        # 🔥 關鍵：給一個「偏向」
         return {
             "symbol": symbol,
-            "action": "HOLD",
-            "side": "NONE",
+            "action": "BUY",   # 強制交易
+            "side": "LONG",
             "score": prob
         }
